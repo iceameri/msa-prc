@@ -1,0 +1,11 @@
+server:
+  port: 1030
+
+spring:
+  security:
+    oauth2:
+      resourceserver:
+        opaquetoken:
+          introspection-uri: http://localhost:1010/oauth2/introspect
+          client-id: opaque-server-client
+          client-secret: 1234qwer

@@ -1,0 +1,18 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://postgres-opaque:5432/opaque_db
+    username: '{cipher}암호화된_사용자명'
+    password: '{cipher}암호화된_비밀번호'
+  kafka:
+    bootstrap-servers: kafka:9092
+  security:
+    oauth2:
+      resourceserver:
+        opaquetoken:
+          introspection-uri: https://auth.example.com/oauth2/introspect
+          client-secret: '{cipher}암호화된_시크릿'
+
+logging:
+  level:
+    root: INFO
+    com.example: INFO

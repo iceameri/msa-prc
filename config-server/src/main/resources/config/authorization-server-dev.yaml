@@ -1,0 +1,10 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/authorization_db
+    username: admin
+    password: admin
+
+logging:
+  level:
+    root: DEBUG
+    com.example: DEBUG

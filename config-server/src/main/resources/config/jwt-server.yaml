@@ -1,0 +1,10 @@
+server:
+  port: 1020
+
+spring:
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: http://localhost:1010
+          jwk-set-uri: http://localhost:1010/oauth2/jwks

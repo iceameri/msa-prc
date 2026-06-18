@@ -1,0 +1,24 @@
+{
+  "properties": [
+    {
+      "name": "spring.kafka.bootstrap-servers",
+      "type": "java.lang.String",
+      "description": "Description for spring.kafka.bootstrap-servers."
+    },
+    {
+      "name": "spring.kafka.producer.key-serializer",
+      "type": "java.lang.String",
+      "description": "Description for spring.kafka.producer.key-serializer."
+    },
+    {
+      "name": "spring.kafka.producer.value-serializer",
+      "type": "java.lang.String",
+      "description": "Description for spring.kafka.producer.value-serializer."
+    },
+    {
+      "name": "management.zipkin.tracing.endpoint",
+      "type": "java.lang.String",
+      "description": "Description for management.zipkin.tracing.endpoint."
+    }
+  ]
+}

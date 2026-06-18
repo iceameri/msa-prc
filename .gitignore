@@ -1,0 +1,23 @@
+# Logs
+logs/
+log/
+.log
+*.log
+*.log.*
+
+# Spring Boot build output
+**/build/
+**/.gradle/
+**/out/
+**/bin/
+
+# IDE
+.idea/
+**/*.iws
+**/*.iml
+**/*.ipr
+**/.kotlin/
+**/.vscode/
+
+# Spring Initializr boilerplate (각 서비스 .gitignore 중복 제외)
+**/HELP.md

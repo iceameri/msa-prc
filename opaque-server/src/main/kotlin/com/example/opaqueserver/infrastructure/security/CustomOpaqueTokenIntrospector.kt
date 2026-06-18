@@ -1,0 +1,58 @@
+package com.example.opaqueserver.infrastructure.security
+
+import com.example.opaqueserver.application.port.out.EventPublishPort
+import org.springframework.beans.factory.annotation.Value
+import org.springframework.core.ParameterizedTypeReference
+import org.springframework.data.redis.core.RedisTemplate
+import org.springframework.http.MediaType
+import org.springframework.security.core.authority.SimpleGrantedAuthority
+import org.springframework.security.oauth2.core.DefaultOAuth2AuthenticatedPrincipal
+import org.springframework.security.oauth2.core.OAuth2AuthenticatedPrincipal
+import org.springframework.security.oauth2.server.resource.introspection.OAuth2IntrospectionException
+import org.springframework.security.oauth2.server.resource.introspection.OpaqueTokenIntrospector
+import org.springframework.stereotype.Component
+import org.springframework.util.LinkedMultiValueMap
+import org.springframework.web.client.RestClient
+
+@Component
+class CustomOpaqueTokenIntrospector(
+    @Value("\${spring.security.oauth2.resourceserver.opaquetoken.introspection-uri}") private val introspectionUri: String,
+    @Value("\${spring.security.oauth2.resourceserver.opaquetoken.client-id}") private val clientId: String,
+    @Value("\${spring.security.oauth2.resourceserver.opaquetoken.client-secret}") private val clientSecret: String,
+    private val eventPublishPort: EventPublishPort,
+    private val redisTemplate: RedisTemplate<String, Any>
+) : OpaqueTokenIntrospector {
+
+    private val restClient: RestClient = RestClient.builder()
+        .defaultHeaders { it.setBasicAuth(clientId, clientSecret) }
+        .build()
+
+    override fun introspect(token: String): OAuth2AuthenticatedPrincipal {
+        val claims = restClient.post()
+            .uri(introspectionUri)
+            .contentType(MediaType.APPLICATION_FORM_URLENCODED)
+            .body(LinkedMultiValueMap<String, String>().apply { add("token", token) })
+            .retrieve()
+            .body(object : ParameterizedTypeReference<Map<String, Any>>() {})
+            ?: throw OAuth2IntrospectionException("Empty introspection response")
+
+        if (claims["active"] != true) {
+            throw OAuth2IntrospectionException("Token is not active")
+        }
+
+        // sub = userId string (set by OAuth2TokenCustomizer in authorization-server)
+        val userId = claims["sub"]?.toString()?.toLongOrNull()
+            ?: throw OAuth2IntrospectionException("Missing or invalid sub in introspection response")
+        val username = claims["username"]?.toString() ?: userId.toString()
+
+        eventPublishPort.publish("user-active", userId.toString(), """{"userId":$userId}""")
+
+        val authorities = (redisTemplate.opsForValue().get("jwt:authorities:$username") as? Collection<*>)
+            ?.filterIsInstance<String>()
+            ?.map { SimpleGrantedAuthority(it) }
+            ?.takeIf { it.isNotEmpty() }
+            ?: throw OAuth2IntrospectionException("Could not load authorities for user: $username")
+
+        return DefaultOAuth2AuthenticatedPrincipal(username, claims, authorities)
+    }
+}

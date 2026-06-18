@@ -1,0 +1,57 @@
+server:
+  port: 1110
+
+spring:
+  application:
+    name: config-server
+
+  profiles:
+    active: native   # 로컬 파일 기반 (Git 기반으로 전환 시 git으로 변경)
+
+  # ── Config Server ────────────────────────────────────────
+  cloud:
+    config:
+      server:
+        native:
+          search-locations: classpath:/config   # src/main/resources/config/ 하위에 서버별 yml 위치
+        encrypt:
+          enabled: true   # 암호화된 설정값 복호화 활성화
+
+    # ── Spring Cloud Bus + Kafka (설정 변경 자동 반영) ────────
+    bus:
+      enabled: true
+
+  # ── Kafka ───────────────────────────────────────────────
+  kafka:
+    bootstrap-servers: localhost:9092
+
+# ── 암호화 키 ──────────────────────────────────────────────
+encrypt:
+  key:   # openssl rand -hex 32 등으로 생성한 대칭키
+
+# ── Eureka ────────────────────────────────────────────────
+eureka:
+  client:
+    service-url:
+      defaultZone: http://admin:admin@localhost:1120/eureka/
+    healthcheck:
+      enabled: true
+    registry-fetch-interval-seconds: 5        # 기본 30초 → 레지스트리 갱신 주기
+  instance:
+    prefer-ip-address: true
+    initial-status: STARTING                  # 헬스체크 통과 전까지 트래픽 차단
+    instance-id: ${spring.application.name}:${server.port}
+    lease-renewal-interval-in-seconds: 10     # 기본 30초 → 하트비트 주기
+    lease-expiration-duration-in-seconds: 30  # 기본 90초 → 이 시간 동안 하트비트 없으면 DOWN
+    health-check-url-path: /actuator/health
+    status-page-url-path: /actuator/info
+
+# ── Actuator ──────────────────────────────────────────────
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info, busrefresh, refresh, encrypt, decrypt
+  metrics:
+    tags:
+      application: ${spring.application.name}

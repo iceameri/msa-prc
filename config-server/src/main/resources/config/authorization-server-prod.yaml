@@ -1,0 +1,14 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://postgres-auth:5432/authorization_db
+    username: '{cipher}암호화된_사용자명'
+    password: '{cipher}암호화된_비밀번호'
+  security:
+    oauth2:
+      authorizationserver:
+        issuer: https://auth.example.com
+
+logging:
+  level:
+    root: INFO
+    com.example: INFO

@@ -1,0 +1,20 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://postgres-jwt:5432/jwt_db
+    username: '{cipher}암호화된_사용자명'
+    password: '{cipher}암호화된_비밀번호'
+  elasticsearch:
+    uris: http://elasticsearch:9200
+  kafka:
+    bootstrap-servers: kafka:9092
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: https://auth.example.com
+          jwk-set-uri: https://auth.example.com/oauth2/jwks
+
+logging:
+  level:
+    root: INFO
+    com.example: INFO

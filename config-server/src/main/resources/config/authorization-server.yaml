@@ -1,0 +1,8 @@
+server:
+  port: 1010
+
+spring:
+  security:
+    oauth2:
+      authorizationserver:
+        issuer: http://localhost:1010

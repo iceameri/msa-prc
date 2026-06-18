@@ -1,0 +1,57 @@
+spring:
+  data:
+    redis:
+      host: localhost
+      port: 6379
+  cloud:
+    gateway:
+      server:
+        webflux:
+          globalcors:
+            cors-configurations:
+              '[/**]':
+                allowed-origins: "*"
+                allowed-methods: "*"
+                allowed-headers: "*"
+          default-filters:
+            - DedupeResponseHeader=Access-Control-Allow-Credentials Access-Control-Allow-Origin
+          routes:
+            - id: authorization-server
+              uri: lb://authorization-server
+              predicates:
+                - Path=/auth/**
+            - id: jwt-server
+              uri: lb://jwt-server
+              predicates:
+                - Path=/api/**
+              filters:
+                - name: RequestRateLimiter
+                  args:
+                    redis-rate-limiter.replenishRate: 20
+                    redis-rate-limiter.burstCapacity: 40
+                    redis-rate-limiter.requestedTokens: 1
+            - id: opaque-server-admin
+              uri: lb://opaque-server
+              predicates:
+                - Path=/admin/**
+              filters:
+                - name: RequestRateLimiter
+                  args:
+                    redis-rate-limiter.replenishRate: 10
+                    redis-rate-limiter.burstCapacity: 20
+                    redis-rate-limiter.requestedTokens: 1
+            - id: opaque-server-user
+              uri: lb://opaque-server
+              predicates:
+                - Path=/payments/**
+              filters:
+                - name: RequestRateLimiter
+                  args:
+                    redis-rate-limiter.replenishRate: 20
+                    redis-rate-limiter.burstCapacity: 40
+                    redis-rate-limiter.requestedTokens: 1
+
+logging:
+  level:
+    root: INFO
+    org.springframework.cloud.gateway: INFO

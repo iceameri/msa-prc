@@ -1,0 +1,14 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5433/jwt_db
+    username: admin
+    password: admin
+  elasticsearch:
+    uris: http://localhost:9200
+  kafka:
+    bootstrap-servers: localhost:9092
+
+logging:
+  level:
+    root: DEBUG
+    com.example: DEBUG

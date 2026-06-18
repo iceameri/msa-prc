@@ -1,0 +1,13 @@
+{
+  "properties": [
+    {
+      "name": "management.tracing.sampling.probability",
+      "type": "java.lang.String",
+      "description": "Description for management.tracing.sampling.probability."
+    },
+    {
+      "name": "management.zipkin.tracing.endpoint",
+      "type": "java.lang.String",
+      "description": "Description for management.zipkin.tracing.endpoint."
+    }
+  ] }

@@ -1,0 +1,128 @@
+{
+  "properties": [
+    {
+      "name": "spring.cloud.gateway.globalcors.cors-configurations.[/**].allowed-origins",
+      "type": "java.lang.String",
+      "description": "Description for spring.cloud.gateway.globalcors.cors-configurations.[/**].allowed-origins."
+    },
+    {
+      "name": "spring.cloud.gateway.globalcors.cors-configurations.[/**].allowed-methods",
+      "type": "java.lang.String",
+      "description": "Description for spring.cloud.gateway.globalcors.cors-configurations.[/**].allowed-methods."
+    },
+    {
+      "name": "spring.cloud.gateway.globalcors.cors-configurations.[/**].allowed-headers",
+      "type": "java.lang.String",
+      "description": "Description for spring.cloud.gateway.globalcors.cors-configurations.[/**].allowed-headers."
+    },
+    {
+      "name": "spring.cloud.gateway.default-filters",
+      "type": "java.lang.String",
+      "description": "Description for spring.cloud.gateway.default-filters."
+    },
+    {
+      "name": "spring.cloud.gateway.routes",
+      "type": "java.lang.String",
+      "description": "Description for spring.cloud.gateway.routes."
+    },
+    {
+      "name": "spring.cloud.gateway.routes[0].id",
+      "type": "java.lang.String",
+      "description": "Description for spring.cloud.gateway.routes[0].id."
+    },
+    {
+      "name": "spring.cloud.gateway.routes[0].uri",
+      "type": "java.lang.String",
+      "description": "Description for spring.cloud.gateway.routes[0].uri."
+    },
+    {
+      "name": "spring.cloud.gateway.routes[0].predicates",
+      "type": "java.lang.String",
+      "description": "Description for spring.cloud.gateway.routes[0].predicates."
+    },
+    {
+      "name": "spring.cloud.gateway.routes[1].id",
+      "type": "java.lang.String",
+      "description": "Description for spring.cloud.gateway.routes[1].id."
+    },
+    {
+      "name": "spring.cloud.gateway.routes[1].uri",
+      "type": "java.lang.String",
+      "description": "Description for spring.cloud.gateway.routes[1].uri."
+    },
+    {
+      "name": "spring.cloud.gateway.routes[1].predicates",
+      "type": "java.lang.String",
+      "description": "Description for spring.cloud.gateway.routes[1].predicates."
+    },
+    {
+      "name": "spring.cloud.gateway.routes[1].filters",
+      "type": "java.lang.String",
+      "description": "Description for spring.cloud.gateway.routes[1].filters."
+    },
+    {
+      "name": "spring.cloud.gateway.routes[1].filters[0].name",
+      "type": "java.lang.String",
+      "description": "Description for spring.cloud.gateway.routes[1].filters[0].name."
+    },
+    {
+      "name": "spring.cloud.gateway.routes[1].filters[0].args.redis-rate-limiter.replenishRate",
+      "type": "java.lang.String",
+      "description": "Description for spring.cloud.gateway.routes[1].filters[0].args.redis-rate-limiter.replenishRate."
+    },
+    {
+      "name": "spring.cloud.gateway.routes[1].filters[0].args.redis-rate-limiter.burstCapacity",
+      "type": "java.lang.String",
+      "description": "Description for spring.cloud.gateway.routes[1].filters[0].args.redis-rate-limiter.burstCapacity."
+    },
+    {
+      "name": "spring.cloud.gateway.routes[1].filters[0].args.redis-rate-limiter.requestedTokens",
+      "type": "java.lang.String",
+      "description": "Description for spring.cloud.gateway.routes[1].filters[0].args.redis-rate-limiter.requestedTokens."
+    },
+    {
+      "name": "spring.cloud.gateway.routes[2].id",
+      "type": "java.lang.String",
+      "description": "Description for spring.cloud.gateway.routes[2].id."
+    },
+    {
+      "name": "spring.cloud.gateway.routes[2].uri",
+      "type": "java.lang.String",
+      "description": "Description for spring.cloud.gateway.routes[2].uri."
+    },
+    {
+      "name": "spring.cloud.gateway.routes[2].predicates",
+      "type": "java.lang.String",
+      "description": "Description for spring.cloud.gateway.routes[2].predicates."
+    },
+    {
+      "name": "spring.cloud.gateway.routes[2].filters",
+      "type": "java.lang.String",
+      "description": "Description for spring.cloud.gateway.routes[2].filters."
+    },
+    {
+      "name": "spring.cloud.gateway.routes[2].filters[0].name",
+      "type": "java.lang.String",
+      "description": "Description for spring.cloud.gateway.routes[2].filters[0].name."
+    },
+    {
+      "name": "spring.cloud.gateway.routes[2].filters[0].args.redis-rate-limiter.replenishRate",
+      "type": "java.lang.String",
+      "description": "Description for spring.cloud.gateway.routes[2].filters[0].args.redis-rate-limiter.replenishRate."
+    },
+    {
+      "name": "spring.cloud.gateway.routes[2].filters[0].args.redis-rate-limiter.burstCapacity",
+      "type": "java.lang.String",
+      "description": "Description for spring.cloud.gateway.routes[2].filters[0].args.redis-rate-limiter.burstCapacity."
+    },
+    {
+      "name": "spring.cloud.gateway.routes[2].filters[0].args.redis-rate-limiter.requestedTokens",
+      "type": "java.lang.String",
+      "description": "Description for spring.cloud.gateway.routes[2].filters[0].args.redis-rate-limiter.requestedTokens."
+    },
+    {
+      "name": "management.zipkin.tracing.endpoint",
+      "type": "java.lang.String",
+      "description": "Description for management.zipkin.tracing.endpoint."
+    }
+  ] }

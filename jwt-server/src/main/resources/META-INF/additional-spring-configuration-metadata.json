@@ -1,0 +1,48 @@
+{
+  "properties": [
+    {
+      "name": "spring.kafka.bootstrap-servers",
+      "type": "java.lang.String",
+      "description": "Description for spring.kafka.bootstrap-servers."
+    },
+    {
+      "name": "spring.kafka.producer.key-serializer",
+      "type": "java.lang.String",
+      "description": "Description for spring.kafka.producer.key-serializer."
+    },
+    {
+      "name": "spring.kafka.producer.value-serializer",
+      "type": "java.lang.String",
+      "description": "Description for spring.kafka.producer.value-serializer."
+    },
+    {
+      "name": "minio.endpoint",
+      "type": "java.lang.String",
+      "description": "Description for minio.endpoint."
+    },
+    {
+      "name": "minio.access-key",
+      "type": "java.lang.String",
+      "description": "Description for minio.access-key."
+    },
+    {
+      "name": "minio.secret-key",
+      "type": "java.lang.String",
+      "description": "Description for minio.secret-key."
+    },
+    {
+      "name": "minio.bucket-name",
+      "type": "java.lang.String",
+      "description": "Description for minio.bucket-name."
+    },
+    {
+      "name": "management.zipkin.tracing.endpoint",
+      "type": "java.lang.String",
+      "description": "Description for management.zipkin.tracing.endpoint."
+    },
+    {
+      "name": "management.tracing.sampling.probability",
+      "type": "java.lang.String",
+      "description": "Description for management.tracing.sampling.probability."
+    }
+  ] }
