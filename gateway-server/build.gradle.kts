@@ -46,9 +46,9 @@ dependencies {
     // Resilience4j Reactive (circuit breaker)
     implementation("org.springframework.cloud:spring-cloud-starter-circuitbreaker-reactor-resilience4j")
 
-    // Tracing - OpenTelemetry + Zipkin
-    implementation("io.micrometer:micrometer-tracing-bridge-otel")
-    implementation("io.opentelemetry:opentelemetry-exporter-zipkin")
+    // Tracing - Brave + Zipkin (Spring Boot 4.0: spring-boot-starter-zipkin으로 통합)
+    implementation("org.springframework.boot:spring-boot-starter-zipkin")
+    implementation("io.zipkin.brave:brave")
 
     // Service Discovery & Config
     implementation("org.springframework.cloud:spring-cloud-starter-netflix-eureka-client")

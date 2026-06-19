@@ -8,3 +8,9 @@ spring:
         jwt:
           issuer-uri: http://localhost:1010
           jwk-set-uri: http://localhost:1010/oauth2/jwks
+
+management:
+  tracing:
+    propagation:
+      consume: [b3_multi, b3]
+      produce: [b3_multi, b3]
