@@ -9,7 +9,7 @@ import org.springframework.web.bind.annotation.*
 
 @RestController
 @RequestMapping("/admin/users")
-@PreAuthorize("hasRole('ADMIN')")
+@PreAuthorize("hasAnyRole('ADMIN', 'SYSTEM')")
 class UserManagementController(private val userManagementService: UserManagementService) {
 
     @PostMapping("/{userId}/suspend")

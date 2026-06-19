@@ -20,7 +20,7 @@ class SecurityConfig(private val introspector: CustomOpaqueTokenIntrospector) {
         http.sessionManagement { it.sessionCreationPolicy(SessionCreationPolicy.STATELESS) }
         http.authorizeHttpRequests {
             it.requestMatchers("/actuator/health", "/v3/api-docs/**", "/swagger-ui/**").permitAll()
-            it.requestMatchers("/admin/**").hasRole("ADMIN")
+            it.requestMatchers("/admin/**").hasAnyRole("ADMIN", "SYSTEM")
             it.requestMatchers("/payments/**").hasAnyRole("USER", "ADMIN")
             it.anyRequest().authenticated()
         }

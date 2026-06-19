@@ -4,7 +4,8 @@ import java.time.Instant
 
 data class Post(
     val id: Long? = null,
-    val authorId: Long,
+    val authorId: Long? = null,
+    val clientId: String? = null,
     val authorUsername: String? = null,
     val title: String,
     val content: String,

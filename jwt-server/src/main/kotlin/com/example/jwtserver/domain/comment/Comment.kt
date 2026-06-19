@@ -5,7 +5,8 @@ import java.time.Instant
 data class Comment(
     val id: Long? = null,
     val postId: Long,
-    val authorId: Long,
+    val authorId: Long? = null,
+    val clientId: String? = null,
     val authorUsername: String? = null,
     val content: String,
     val createdAt: Instant = Instant.now(),

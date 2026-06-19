@@ -25,6 +25,6 @@ class SearchController(private val searchService: SearchService) {
     ): List<String> = searchService.searchUsers(q, offset, limit)
 
     @PostMapping("/reindex")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'SYSTEM')")
     fun reindex(): Map<String, Int> = mapOf("indexed" to searchService.reindexAll())
 }

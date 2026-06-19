@@ -4,6 +4,7 @@ import org.springframework.cloud.gateway.filter.GatewayFilterChain
 import org.springframework.cloud.gateway.filter.GlobalFilter
 import org.springframework.core.Ordered
 import org.springframework.data.redis.core.ReactiveRedisTemplate
+import org.springframework.http.HttpHeaders
 import org.springframework.security.core.context.ReactiveSecurityContextHolder
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken
 import org.springframework.stereotype.Component
@@ -20,6 +21,7 @@ class JwtUserContextFilter(
         private const val HEADER_USER_ID = "X-User-Id"
         private const val HEADER_USER_NAME = "X-User-Name"
         private const val HEADER_USER_AUTHORITIES = "X-User-Authorities"
+        private const val HEADER_CLIENT_ID = "X-Client-Id"
     }
 
     override fun filter(exchange: ServerWebExchange, chain: GatewayFilterChain): Mono<Void> =
@@ -27,42 +29,64 @@ class JwtUserContextFilter(
             .mapNotNull { it.authentication }
             .filter { it.isAuthenticated }
             .flatMap { auth ->
-                // sub = userId string (after OAuth2TokenCustomizer), username claim added separately
                 val jwtAuth = auth as? JwtAuthenticationToken
-                val userId = jwtAuth?.token?.getClaim<String>("user_id") ?: jwtAuth?.token?.subject ?: auth.name
-                val username = jwtAuth?.token?.getClaim<String>("username") ?: userId
+                val userId = jwtAuth?.token?.getClaim<String>("user_id")
 
-                redisTemplate.opsForValue().get("$AUTHORITIES_KEY_PREFIX$username")
-                    .map { value ->
-                        @Suppress("UNCHECKED_CAST")
-                        val authorities = (value as? Collection<*>)
-                            ?.filterIsInstance<String>()
-                            ?.joinToString(",")
-                            ?: ""
-                        mutateExchange(exchange, userId, username, authorities)
-                    }
-                    .defaultIfEmpty(mutateExchange(exchange, userId, username, ""))
+                if (userId != null) {
+                    val username = jwtAuth!!.token.getClaim<String>("username") ?: userId
+                    redisTemplate.opsForValue().get("$AUTHORITIES_KEY_PREFIX$username")
+                        .map { value ->
+                            @Suppress("UNCHECKED_CAST")
+                            val authorities = (value as? Collection<*>)
+                                ?.filterIsInstance<String>()
+                                ?.joinToString(",") ?: ""
+                            buildUserExchange(exchange, userId, username, authorities)
+                        }
+                        .defaultIfEmpty(buildUserExchange(exchange, userId, username, ""))
+                } else {
+                    val clientId = jwtAuth?.token?.getClaim<String>("client_id")
+                        ?: jwtAuth?.token?.subject ?: ""
+                    Mono.just(buildClientExchange(exchange, clientId))
+                }
             }
-            .defaultIfEmpty(exchange)
+            .defaultIfEmpty(stripTrustedHeaders(exchange))
             .flatMap { chain.filter(it) }
-
-    private fun mutateExchange(
-        exchange: ServerWebExchange,
-        userId: String,
-        username: String,
-        authorities: String
-    ): ServerWebExchange =
-        exchange.mutate()
-            .request(
-                exchange.request.mutate()
-                    .header(HEADER_USER_ID, userId)
-                    .header(HEADER_USER_NAME, username)
-                    .header(HEADER_USER_AUTHORITIES, authorities)
-                    .build()
-            )
-            .build()
 
     // Spring Security WebFilter는 WebFilter 체인(-100)에서 처리되고
     // GlobalFilter는 그 이후 Gateway 체인에서 실행되므로 SecurityContext 접근 가능
     override fun getOrder(): Int = 0
+
+    private fun stripTrustedHeaders(exchange: ServerWebExchange): ServerWebExchange =
+        exchange.mutate()
+            .request(exchange.request.mutate().headers { it.removeTrustedHeaders() }.build())
+            .build()
+
+    private fun buildUserExchange(exchange: ServerWebExchange, userId: String, username: String, authorities: String): ServerWebExchange =
+        exchange.mutate()
+            .request(exchange.request.mutate()
+                .headers {
+                    it.removeTrustedHeaders()
+                    it[HEADER_USER_ID] = listOf(userId)
+                    it[HEADER_USER_NAME] = listOf(username)
+                    it[HEADER_USER_AUTHORITIES] = listOf(authorities)
+                }
+                .build())
+            .build()
+
+    private fun buildClientExchange(exchange: ServerWebExchange, clientId: String): ServerWebExchange =
+        exchange.mutate()
+            .request(exchange.request.mutate()
+                .headers {
+                    it.removeTrustedHeaders()
+                    it[HEADER_CLIENT_ID] = listOf(clientId)
+                }
+                .build())
+            .build()
+
+    private fun HttpHeaders.removeTrustedHeaders() {
+        remove(HEADER_USER_ID)
+        remove(HEADER_USER_NAME)
+        remove(HEADER_USER_AUTHORITIES)
+        remove(HEADER_CLIENT_ID)
+    }
 }

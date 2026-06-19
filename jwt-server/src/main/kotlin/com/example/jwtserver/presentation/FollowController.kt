@@ -6,6 +6,7 @@ import org.springframework.http.HttpStatus
 import org.springframework.security.access.prepost.PreAuthorize
 import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.web.bind.annotation.*
+import org.springframework.web.server.ResponseStatusException
 
 @RestController
 @RequestMapping("/api/follows")
@@ -13,15 +14,17 @@ class FollowController(private val followService: FollowService) {
 
     @PostMapping("/{targetUsername}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    @PreAuthorize("hasAnyRole('USER', 'ADMIN')")
-    fun follow(@AuthenticationPrincipal user: AuthenticatedUser, @PathVariable targetUsername: String) {
+    @PreAuthorize("hasAnyRole('USER', 'ADMIN', 'SYSTEM')")
+    fun follow(@AuthenticationPrincipal user: AuthenticatedUser?, @PathVariable targetUsername: String) {
+        user ?: throw ResponseStatusException(HttpStatus.FORBIDDEN, "User context required")
         followService.follow(user.id, user.username, targetUsername)
     }
 
     @DeleteMapping("/{targetUsername}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    @PreAuthorize("hasAnyRole('USER', 'ADMIN')")
-    fun unfollow(@AuthenticationPrincipal user: AuthenticatedUser, @PathVariable targetUsername: String) {
+    @PreAuthorize("hasAnyRole('USER', 'ADMIN', 'SYSTEM')")
+    fun unfollow(@AuthenticationPrincipal user: AuthenticatedUser?, @PathVariable targetUsername: String) {
+        user ?: throw ResponseStatusException(HttpStatus.FORBIDDEN, "User context required")
         followService.unfollow(user.id, user.username, targetUsername)
     }
 

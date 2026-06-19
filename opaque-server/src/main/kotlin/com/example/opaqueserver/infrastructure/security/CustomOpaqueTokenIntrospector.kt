@@ -40,12 +40,18 @@ class CustomOpaqueTokenIntrospector(
             throw OAuth2IntrospectionException("Token is not active")
         }
 
-        // sub = userId string (set by OAuth2TokenCustomizer in authorization-server)
-        val userId = claims["sub"]?.toString()?.toLongOrNull()
-            ?: throw OAuth2IntrospectionException("Missing or invalid sub in introspection response")
-        val username = claims["username"]?.toString() ?: userId.toString()
+        val sub = claims["sub"]?.toString()
+            ?: throw OAuth2IntrospectionException("Missing sub in introspection response")
 
-        eventPublishPort.publish("user-active", userId.toString(), """{"userId":$userId}""")
+        // client_credentials tokens have sub = client_id (non-numeric); user tokens have sub = userId (Long string)
+        val userId = sub.toLongOrNull()
+        if (userId == null) {
+            return DefaultOAuth2AuthenticatedPrincipal(sub, claims, listOf(SimpleGrantedAuthority("ROLE_SYSTEM")))
+        }
+
+        val username = claims["username"]?.toString() ?: sub
+
+        eventPublishPort.publish("user-active", sub, """{"userId":$userId}""")
 
         val authorities = (redisTemplate.opsForValue().get("jwt:authorities:$username") as? Collection<*>)
             ?.filterIsInstance<String>()

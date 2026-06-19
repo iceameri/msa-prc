@@ -145,7 +145,10 @@ JWT 클레임 커스터마이징
   - 유저 토큰 발급 시 username으로 DB/캐시에서 userId 조회
   - JWT sub = username (기본값 유지 — Redis jwt:authorities:{username} 키와 정확히 일치)
   - JWT user_id 클레임 추가 (userId.toString()) — 하위 서비스의 숫자 ID 참조용
-  - client_credentials는 users 테이블에 없으므로 자동으로 건너뜀
+  - client_credentials 그랜트: user_id/username 대신 client_id 클레임 추가 (RegisteredClient.clientId 값)
+- OAuth2TokenCustomizerConfig: OAuth2TokenCustomizer<OAuth2TokenClaimsContext> 빈 등록 (opaque token 전용)
+  - 유저 토큰: sub = userId.toString() (opaque introspector가 toLongOrNull()로 유저 감지), username 클레임 추가
+  - client_credentials: 아무것도 추가하지 않음 → sub = client_id (Spring 기본값, 비숫자)
 
 Clean Architecture 구조
 - domain/user: User (status, lastActiveAt 추가; mfaEnabled, mfaSecret 포함), UserRole, UserRepository (findByUsername/findByEmail/findById/save/lockUser/resetLoginAttempts/updateMfaSettings/setEnabled/setEnabledById/updateStatusById/setStatusAndEnabled/updateUsername), UserActivityRepository (upsert)
@@ -181,12 +184,13 @@ DDL (authorization_db) — FK 논리적 사용 (REFERENCES 제약 없음)
 - users: id(BIGSERIAL PK), username, password, email, enabled, status(ACTIVE/SUSPENDED/BANNED/DELETED), login_attempts, locked_until, last_active_at, created_at, mfa_enabled, mfa_secret
 - user_authorities: user_id (logical FK → users.id), authority — 복수 권한 지원
 - user_activity: user_id(BIGINT PK, logical FK → users.id), last_active_at
+- authorization_system_clients: client_id(VARCHAR PK), display_name — 시스템 클라이언트 원본 (jwt_db.authorization_system_clients의 source of truth)
 - oauth2_registered_client, oauth2_authorization, oauth2_authorization_consent (timestamp 전부 TIMESTAMPTZ)
 
 
 jwt-server
 - port 1020
-- 일반 유저, 어드민 유저 (ROLE_USER, ROLE_ADMIN)
+- 일반 유저, 어드민 유저, 시스템 클라이언트 (ROLE_USER, ROLE_ADMIN, ROLE_SYSTEM)
 - @EnableMethodSecurity 활성화 (@PreAuthorize 메서드 레벨 권한 체크)
 - STATELESS 세션
 - 게시글 CRUD (삭제: 작성자 본인 또는 ADMIN 가능)
@@ -202,13 +206,28 @@ jwt-server
 - 신고 기능
 
 인증 방식 (gateway 헤더 신뢰)
-- gateway에서 JWT 검증 후 X-User-Id / X-User-Name / X-User-Authorities 헤더로 전달
-  - X-User-Id: JWT user_id 클레임 (userId.toString())
-  - X-User-Name: JWT sub = username (실제 사용자명)
-  - X-User-Authorities: Redis jwt:authorities:{username} 조회값
-- GatewayHeaderAuthenticationFilter: X-User-Id + X-User-Name + X-User-Authorities → AuthenticatedUser(id, username, roles) → UsernamePasswordAuthenticationToken → SecurityContext 세팅
+- gateway에서 JWT 검증 후 토큰 종류에 따라 헤더 분기 주입
+  - 유저 토큰 (user_id 클레임 존재): X-User-Id / X-User-Name / X-User-Authorities 헤더 주입
+    - X-User-Id: JWT user_id 클레임 (userId.toString())
+    - X-User-Name: JWT sub = username (실제 사용자명)
+    - X-User-Authorities: Redis jwt:authorities:{username} 조회값
+  - 시스템 클라이언트 토큰 (client_credentials, client_id 클레임 존재): X-Client-Id 헤더 주입
+    - X-Client-Id: JWT client_id 클레임 (RegisteredClient.clientId)
+- JwtUserContextFilter: 수신 시 X-User-Id/X-User-Name/X-User-Authorities/X-Client-Id 헤더 모두 제거 후 재주입 (위조 방지)
+- GatewayHeaderAuthenticationFilter:
+  - X-User-Id + X-User-Name + X-User-Authorities → AuthenticatedUser(id, username, roles) → SecurityContext (ROLE_USER/ROLE_ADMIN 등)
+  - X-Client-Id → AuthenticatedClient(clientId) → SecurityContext (ROLE_SYSTEM)
 - oauth2ResourceServer / CustomJwtAuthenticationConverter 비활성화 (주석처리)
-- 컨트롤러: @AuthenticationPrincipal user: AuthenticatedUser 로 userId·username 동시 주입
+- CallerPrincipal 인터페이스: AuthenticatedUser / AuthenticatedClient 공통 타입
+  - PostController/CommentController: @AuthenticationPrincipal caller: CallerPrincipal 사용 (USER/ADMIN/SYSTEM 모두 허용)
+  - LikeController/FollowController/FeedController/ReportController: @AuthenticationPrincipal user: AuthenticatedUser? + null 가드 (SYSTEM 인증 통과 후 사용자 컨텍스트 필요 시 403)
+
+authorization_system_clients (Local Read-Model for machine clients)
+- Source of truth: authorization_db.authorization_system_clients (authorization-server 관리)
+- Local read-model: jwt_db.authorization_system_clients — 배포 시 DML로 수동 동기화 (Kafka sync 없음, 클라이언트는 런타임에 변경 없음)
+- 조회 시 posts/comments에서 COALESCE(u.username, sc.display_name) AS author_username 사용
+  - client_id가 있는 행은 sc.display_name을 author_username으로 표시
+- 초기 데이터: jwt-server, opaque-server (authorization_db + jwt_db 모두 DML 삽입 필요)
 
 authorization_users (Local Read-Model)
 - jwt_db.authorization_users(id BIGINT PK, username) — authorization_db users의 로컬 복사본
@@ -230,9 +249,13 @@ Outbox Pattern (알림 이벤트)
 - 이벤트 타입: POST_CREATED, POST_LIKED, POST_COMMENTED, USER_FOLLOWED, REPORT_CREATED
 
 DDL (jwt_db) — FK 논리적 사용 (REFERENCES 제약 없음)
+- authorization_system_clients: client_id(VARCHAR PK), display_name
 - authorization_users: id(BIGINT PK, authorization_db users.id와 동일값), username (UNIQUE INDEX)
-- posts: id, author_id (logical FK → authorization_users.id), title, content, image_url, like_count, comment_count, status, created_at, updated_at — author_username 없음, 조회 시 LEFT JOIN authorization_users
-- comments: id, post_id (logical FK → posts.id), author_id (logical FK → authorization_users.id), content — author_username 없음, 조회 시 LEFT JOIN authorization_users
+- posts: id, author_id BIGINT NULL (logical FK → authorization_users.id), client_id VARCHAR NULL (logical FK → authorization_system_clients.client_id), title, content, image_url, like_count, comment_count, status, created_at, updated_at
+  - XOR CHECK: (author_id IS NOT NULL AND client_id IS NULL) OR (author_id IS NULL AND client_id IS NOT NULL)
+  - 조회: LEFT JOIN authorization_users + LEFT JOIN authorization_system_clients, COALESCE(u.username, sc.display_name) AS author_username
+- comments: id, post_id (logical FK → posts.id), author_id BIGINT NULL (logical FK → authorization_users.id), client_id VARCHAR NULL (logical FK → authorization_system_clients.client_id), content
+  - XOR CHECK 동일 적용, 조회 시 COALESCE(u.username, sc.display_name) AS author_username
 - likes: post_id (logical FK → posts.id), user_id (logical FK → authorization_users.id) — PK(post_id, user_id)
 - follows: follower_id / following_id (logical FK → authorization_users.id) — PK(follower_id, following_id), CHECK(follower ≠ following)
 - hashtags: id, name(UNIQUE) + post_hashtags: post_id / hashtag_id (logical FK)
@@ -240,39 +263,57 @@ DDL (jwt_db) — FK 논리적 사용 (REFERENCES 제약 없음)
 - outbox_events: id, aggregate_id, aggregate_type, event_type, payload(JSONB), published, created_at
 
 Clean Architecture 구조
-- domain: User(id: Long, username), Post(authorUsername: String? — JOIN으로 채워짐, PostStatus), Comment(authorUsername: String? — JOIN으로 채워짐), Like, Follow, Hashtag, Report(ReportTargetType), OutboxEvent
+- domain: User(id: Long, username), Post(authorId: Long? — nullable, clientId: String? — system 작성 시, authorUsername: String? — JOIN으로 채워짐, PostStatus), Comment(authorId: Long? nullable, clientId: String? nullable, authorUsername: String? — JOIN으로 채워짐), Like, Follow, Hashtag, Report(ReportTargetType), OutboxEvent
 - application/port/out: AuthoritiesCachePort, SearchPort, ImageStoragePort, EventPublishPort, OutboxRepository (save / findUnpublished / markPublished)
 - application/service: UserSyncService (sync=authorization_users UPSERT / resolveId), PostService, CommentService, LikeService, FollowService, FeedService, SearchService (reindexAll: PostgreSQL 전체 배치 조회 → ES 재인덱싱, 500건 단위), ImageService, ReportService
-  - 모든 write service: sync(userId, username) 선행 후 userId를 도메인 FK로 사용
-  - Post/Comment 저장 시 authorUsername 미저장 — authorization_users JOIN으로 조회 시 획득
+  - PostService/CommentService: CallerPrincipal 파라미터 사용 (resolveAuthor() / canModify() 내부 헬퍼)
+    - AuthenticatedUser: sync(id, username) 선행, authorId 사용
+    - AuthenticatedClient: sync 없음, clientId 사용, displayName = clientId
+  - Post/Comment 저장 시 authorUsername 미저장 — authorization_users/authorization_system_clients JOIN으로 조회 시 획득
   - 알림 이벤트 payload 구조: {postId?, actorUsername, targetUsername} — outbox 저장만, 직접 발행 없음
-  - PostService.delete(): authorId == userId OR isAdmin(user.roles에 ROLE_ADMIN 포함) 시 삭제 허용
-- infrastructure/persistence: UserJdbcRepository (authorization_users 테이블, sync=UPSERT on id), PostJdbcRepository (findAll 추가 — 재인덱싱용 전체 조회, 모든 조회 쿼리에 LEFT JOIN authorization_users), CommentJdbcRepository (모든 조회 쿼리에 LEFT JOIN authorization_users), LikeJdbcRepository, FollowJdbcRepository, HashtagJdbcRepository, ReportJdbcRepository, OutboxJdbcRepository (findUnpublished / markPublished 추가)
+  - PostService canModify(): AuthenticatedUser → authorId == userId OR ROLE_ADMIN / AuthenticatedClient → clientId 일치
+- infrastructure/persistence: UserJdbcRepository (authorization_users 테이블, sync=UPSERT on id), PostJdbcRepository (모든 조회에 LEFT JOIN authorization_users + LEFT JOIN authorization_system_clients, COALESCE AS author_username; save()에서 authorId/clientId nullable 처리; rs.wasNull()로 NULL authorId 감지), CommentJdbcRepository (동일 패턴), LikeJdbcRepository, FollowJdbcRepository, HashtagJdbcRepository, ReportJdbcRepository, OutboxJdbcRepository (findUnpublished / markPublished 추가)
 - infrastructure/elasticsearch: ElasticsearchSearchAdapter (PostDocument / UserDocument, NativeQuery; 인덱스 없을 때 exception chain 순회로 index_not_found 감지 → 빈 배열 반환)
 - infrastructure/minio: MinioImageAdapter (버킷 자동 생성)
 - infrastructure/kafka: KafkaEventPublisher (KafkaTemplate<String, String>), OutboxRelayService (@Scheduled fixedDelay=5s, findUnpublished(100) → Kafka 동기 발행 → markPublished), UserSyncEventConsumer (user-sync 토픽 → userSyncService.sync()), UsernameUpdateEventConsumer (user.username.updated 토픽 → userSyncService.sync() 1행 UPDATE, posts/comments 직접 수정 없음)
 - infrastructure/cache: RedisAuthoritiesCache (jwt:authorities:{username} read-only)
-- infrastructure/security: AuthenticatedUser(id: Long, username: String, roles: List<String>), GatewayHeaderAuthenticationFilter (X-User-Id + X-User-Name + X-User-Authorities → AuthenticatedUser(roles 포함) → SecurityContext), CustomJwtAuthenticationConverter (비활성화, 주석처리)
+- infrastructure/security:
+  - CallerPrincipal (interface) — AuthenticatedUser / AuthenticatedClient 공통 타입
+  - AuthenticatedUser(id: Long, username: String, roles: List<String>) : CallerPrincipal
+  - AuthenticatedClient(clientId: String) : CallerPrincipal
+  - GatewayHeaderAuthenticationFilter:
+    - X-User-Id + X-User-Name + X-User-Authorities → AuthenticatedUser(roles) → SecurityContext
+    - X-Client-Id → AuthenticatedClient → SecurityContext (ROLE_SYSTEM)
+  - CustomJwtAuthenticationConverter (비활성화, 주석처리)
 - infrastructure/config: SecurityConfig (GatewayHeaderAuthenticationFilter 등록, oauth2ResourceServer 제거), RedisConfig (Jackson 3.x), MinioConfig, SwaggerConfig, KafkaTopicConfig (notifications/reports/outbox.events, 파티션 3), KafkaProducerConfig (KafkaTemplate<String,String> 명시적 빈)
-- presentation: PostController, CommentController, LikeController, FollowController, FeedController, SearchController (POST /api/search/reindex ADMIN 전용), ImageController, ReportController, GlobalExceptionHandler
-  - 모든 인증 필요 엔드포인트: @AuthenticationPrincipal user: AuthenticatedUser
+- presentation:
+  - PostController / CommentController: @AuthenticationPrincipal caller: CallerPrincipal, @PreAuthorize('USER','ADMIN','SYSTEM')
+  - LikeController / FollowController / FeedController / ReportController: @AuthenticationPrincipal user: AuthenticatedUser? + null 가드 403, @PreAuthorize('USER','ADMIN','SYSTEM')
+  - ImageController: @PreAuthorize('USER','ADMIN','SYSTEM') (user 파라미터 없음)
+  - SearchController.reindex: @PreAuthorize('ADMIN','SYSTEM')
+  - GlobalExceptionHandler
 
 
 opaque-server
 - port 1030
-- OAuth 2.1 Resource Server (Opaque token introspection) — ROLE_ADMIN (관리) + ROLE_USER (결제) 공용 서버
+- OAuth 2.1 Resource Server (Opaque token introspection) — ROLE_ADMIN (관리) + ROLE_USER (결제) + ROLE_SYSTEM (시스템 클라이언트) 공용 서버
 
 인증 방식
 - Opaque token → authorization-server /oauth2/introspect 호출
 - CustomOpaqueTokenIntrospector:
-  - 토큰 검증 → claims["sub"] → userId(Long), claims["username"] → username
-  - Redis jwt:authorities:{username} 조회 → 권한 부여
-  - user-active 토픽에 {"userId": Long} 발행 (authorization-server가 user_activity UPSERT)
-  - Redis miss 시 OAuth2IntrospectionException 발생 (fail-closed — 권한 불명 시 접근 거부)
-  - DefaultOAuth2AuthenticatedPrincipal(name=username, attributes=claims, authorities)
+  - 토큰 검증 → claims["sub"] 추출
+  - sub.toLongOrNull() == null → client_credentials 토큰 → ROLE_SYSTEM 반환 (user-active 이벤트 발행 없음)
+  - sub.toLongOrNull() != null → userId(Long), claims["username"] → username
+    - Redis jwt:authorities:{username} 조회 → 권한 부여
+    - user-active 토픽에 {"userId": Long} 발행 (authorization-server가 user_activity UPSERT)
+    - Redis miss 시 OAuth2IntrospectionException 발생 (fail-closed — 권한 불명 시 접근 거부)
+  - DefaultOAuth2AuthenticatedPrincipal(name=username or clientId, attributes=claims, authorities)
+- authorization-server OAuth2TokenCustomizerConfig에 OAuth2TokenClaimsContext customizer 추가
+  - 유저 토큰: sub = userId.toString() (introspector의 toLongOrNull() 기준), username 클레임 추가
+  - client_credentials: customizer 미적용 → sub = client_id (Spring 기본값, 비숫자 문자열)
 - Spring Security 7 OpaqueTokenIntrospector 구현체로 등록 (RestClient 직접 호출)
 - SecurityConfig 경로별 권한:
-  - /admin/** → hasRole("ADMIN")
+  - /admin/** → hasAnyRole("ADMIN", "SYSTEM")
   - /payments/** → hasAnyRole("USER", "ADMIN")
 
 결제 (Saga Pattern)
@@ -365,9 +406,15 @@ Clean Architecture 구조
 - infrastructure/rest: UserRestRepository (UserRepository 구현체, auth-server /internal/users/{id} REST 호출 — 실패 시 null 반환, notification email 조회용)
 - infrastructure/kafka: KafkaEventPublisher, NotificationEventConsumer (targetId+target 추출 → send(recipientId, recipientUsername, ...)), ReportEventConsumer, PaymentSagaConsumer
 - infrastructure/mail: MailAdapter (JavaMailSender)
-- infrastructure/security: CustomOpaqueTokenIntrospector (sub=username, Redis authorities 조회, user-active 이벤트 발행, Redis miss 시 예외 발생 fail-closed)
+- infrastructure/security: CustomOpaqueTokenIntrospector (sub.toLongOrNull()로 유저/시스템 분기 — Long이면 유저(Redis 조회+user-active 발행), null이면 ROLE_SYSTEM 반환, Redis miss 시 예외 발생 fail-closed)
 - infrastructure/config: SecurityConfig, RedisConfig (Jackson 3.x, authorization-server와 동일 직렬화), SwaggerConfig, KafkaTopicConfig (payment.saga/user-management/report-actions/user-active, 파티션 3), KafkaProducerConfig (KafkaTemplate<String,String> 명시적 빈), SchedulingConfig (@EnableScheduling)
-- presentation: UserManagementController ({userId} path var, actorId=principal.getAttribute("sub"), actorUsername=principal.name), PaymentController (ADMIN, /admin/payments), UserPaymentController (ROLE_USER, /payments — 소유권 검증), ReportController (actorId+actorUsername 추출), StatisticsController, GlobalExceptionHandler
+- presentation:
+  - UserManagementController ({userId} path var, @PreAuthorize ADMIN+SYSTEM, actorId=principal.getAttribute("sub"), actorUsername=principal.name)
+  - PaymentController (ADMIN 전용, /admin/payments — initiate에서 sub.toLongOrNull() 필요하므로 SYSTEM 불가)
+  - UserPaymentController (ROLE_USER 전용, /payments — 소유권 검증)
+  - ReportController (@PreAuthorize ADMIN+SYSTEM, actorId+actorUsername 추출)
+  - StatisticsController (@PreAuthorize ADMIN+SYSTEM)
+  - GlobalExceptionHandler
     
 gateway-server
 - port 1100
@@ -375,12 +422,15 @@ gateway-server
 
 JWT 검증 및 헤더 전달
 - authorization-server JWK Set으로 JWT 서명 검증 (issuer-uri / jwk-set-uri → localhost:1010)
-- JWT sub = username, JWT user_id 클레임 = userId.toString() (OAuth2TokenCustomizer 적용 후)
-- 검증 완료 후 Redis에서 jwt:authorities:{sub} 조회 → 하위 서비스에 헤더로 전달
+- JWT sub = username (유저 토큰) / client_id (클라이언트 토큰) 구분
+- 유저 토큰 (user_id 클레임 존재): Redis jwt:authorities:{username} 조회 후 헤더 주입
   - X-User-Id: JWT user_id 클레임 (userId.toString())
   - X-User-Name: JWT sub = username
   - X-User-Authorities: {ROLE_USER,ROLE_ADMIN 등 comma-separated}
-- 하위 서비스(jwt-server, opaque-server)는 JWT 직접 검증 없이 헤더만 신뢰
+- 시스템 클라이언트 토큰 (client_credentials, client_id 클레임 존재): X-Client-Id 헤더만 주입
+  - X-Client-Id: JWT client_id 클레임 (RegisteredClient.clientId)
+- JwtUserContextFilter: 수신 헤더 모두 제거 후 재주입 (X-User-Id/Name/Authorities/Client-Id 위조 방지)
+- 하위 서비스(jwt-server)는 JWT 직접 검증 없이 헤더만 신뢰
 - authorization-server는 gateway를 거치지 않음 (OAuth2 브라우저 리다이렉트 특성상 직접 접근)
 
 라우팅
@@ -392,7 +442,7 @@ JWT 검증 및 헤더 전달
 필터 실행 순서
 1. LoggingFilter (order=HIGHEST_PRECEDENCE) — 요청 수신 로그
 2. Spring Security WebFilter — JWT 서명 검증 / permitAll 경로 통과
-3. JwtUserContextFilter (order=0) — Redis authorities 조회 → X-User-* 헤더 주입
+3. JwtUserContextFilter (order=0) — 수신 신뢰 헤더 제거 → 유저/클라이언트 토큰 분기 → X-User-* 또는 X-Client-Id 헤더 주입
 4. Spring Cloud Gateway 라우팅
 5. LoggingFilter doFinally — 응답 상태·소요시간 로그
 

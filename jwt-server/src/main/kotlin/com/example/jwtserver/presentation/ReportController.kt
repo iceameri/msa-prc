@@ -8,6 +8,7 @@ import org.springframework.http.HttpStatus
 import org.springframework.security.access.prepost.PreAuthorize
 import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.web.bind.annotation.*
+import org.springframework.web.server.ResponseStatusException
 
 data class CreateReportRequest(val targetType: ReportTargetType, val targetId: Long, val reason: String)
 data class ReportResponse(val id: Long, val targetType: String, val targetId: Long, val createdAt: String) {
@@ -22,7 +23,9 @@ class ReportController(private val reportService: ReportService) {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    @PreAuthorize("hasAnyRole('USER', 'ADMIN')")
-    fun report(@AuthenticationPrincipal user: AuthenticatedUser, @RequestBody req: CreateReportRequest): ReportResponse =
-        ReportResponse.from(reportService.report(user.id, user.username, req.targetType, req.targetId, req.reason))
+    @PreAuthorize("hasAnyRole('USER', 'ADMIN', 'SYSTEM')")
+    fun report(@AuthenticationPrincipal user: AuthenticatedUser?, @RequestBody req: CreateReportRequest): ReportResponse {
+        user ?: throw ResponseStatusException(HttpStatus.FORBIDDEN, "User context required")
+        return ReportResponse.from(reportService.report(user.id, user.username, req.targetType, req.targetId, req.reason))
+    }
 }

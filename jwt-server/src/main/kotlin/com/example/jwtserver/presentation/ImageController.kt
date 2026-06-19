@@ -14,7 +14,7 @@ class ImageController(private val imageService: ImageService) {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    @PreAuthorize("hasAnyRole('USER', 'ADMIN')")
+    @PreAuthorize("hasAnyRole('USER', 'ADMIN', 'SYSTEM')")
     fun upload(@RequestParam("file") file: MultipartFile): ImageUploadResponse =
         ImageUploadResponse(url = imageService.upload(file))
 }
