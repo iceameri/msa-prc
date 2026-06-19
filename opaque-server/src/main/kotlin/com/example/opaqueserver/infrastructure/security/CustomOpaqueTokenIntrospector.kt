@@ -13,6 +13,7 @@ import org.springframework.security.oauth2.server.resource.introspection.OpaqueT
 import org.springframework.stereotype.Component
 import org.springframework.util.LinkedMultiValueMap
 import org.springframework.web.client.RestClient
+import java.time.Instant
 
 @Component
 class CustomOpaqueTokenIntrospector(
@@ -40,16 +41,23 @@ class CustomOpaqueTokenIntrospector(
             throw OAuth2IntrospectionException("Token is not active")
         }
 
-        val sub = claims["sub"]?.toString()
+        // Spring Security 7 expects exp/nbf/iat as Instant; JSON deserialization produces Integer/Long
+        val normalizedClaims = claims.toMutableMap<String, Any>()
+        for (key in listOf("exp", "nbf", "iat")) {
+            val v = normalizedClaims[key]
+            if (v is Number) normalizedClaims[key] = Instant.ofEpochSecond(v.toLong())
+        }
+
+        val sub = normalizedClaims["sub"]?.toString()
             ?: throw OAuth2IntrospectionException("Missing sub in introspection response")
 
         // client_credentials tokens have sub = client_id (non-numeric); user tokens have sub = userId (Long string)
         val userId = sub.toLongOrNull()
         if (userId == null) {
-            return DefaultOAuth2AuthenticatedPrincipal(sub, claims, listOf(SimpleGrantedAuthority("ROLE_SYSTEM")))
+            return DefaultOAuth2AuthenticatedPrincipal(sub, normalizedClaims, listOf(SimpleGrantedAuthority("ROLE_SYSTEM")))
         }
 
-        val username = claims["username"]?.toString() ?: sub
+        val username = normalizedClaims["username"]?.toString() ?: sub
 
         eventPublishPort.publish("user-active", sub, """{"userId":$userId}""")
 
@@ -59,6 +67,6 @@ class CustomOpaqueTokenIntrospector(
             ?.takeIf { it.isNotEmpty() }
             ?: throw OAuth2IntrospectionException("Could not load authorities for user: $username")
 
-        return DefaultOAuth2AuthenticatedPrincipal(username, claims, authorities)
+        return DefaultOAuth2AuthenticatedPrincipal(username, normalizedClaims, authorities)
     }
 }
