@@ -205,19 +205,14 @@ jwt-server
 - 알림 (Kafka 이벤트 발행)
 - 신고 기능
 
-인증 방식 (gateway 헤더 신뢰)
-- gateway에서 JWT 검증 후 토큰 종류에 따라 헤더 분기 주입
-  - 유저 토큰 (user_id 클레임 존재): X-User-Id / X-User-Name / X-User-Authorities 헤더 주입
-    - X-User-Id: JWT user_id 클레임 (userId.toString())
-    - X-User-Name: JWT sub = username (실제 사용자명)
-    - X-User-Authorities: Redis jwt:authorities:{username} 조회값
-  - 시스템 클라이언트 토큰 (client_credentials, client_id 클레임 존재): X-Client-Id 헤더 주입
-    - X-Client-Id: JWT client_id 클레임 (RegisteredClient.clientId)
-- JwtUserContextFilter: 수신 시 X-User-Id/X-User-Name/X-User-Authorities/X-Client-Id 헤더 모두 제거 후 재주입 (위조 방지)
-- GatewayHeaderAuthenticationFilter:
-  - X-User-Id + X-User-Name + X-User-Authorities → AuthenticatedUser(id, username, roles) → SecurityContext (ROLE_USER/ROLE_ADMIN 등)
-  - X-Client-Id → AuthenticatedClient(clientId) → SecurityContext (ROLE_SYSTEM)
-- oauth2ResourceServer / CustomJwtAuthenticationConverter 비활성화 (주석처리)
+인증 방식 (Zero Trust — 각 서비스 자체 검증)
+- jwt-server가 JWT를 직접 검증 (oauth2ResourceServer + CustomJwtAuthenticationConverter)
+  - gateway는 JWT 서명 검증만 수행 (rate limiting 목적), 헤더 주입 없음
+  - X-User-* / X-Client-Id 헤더에 의존하지 않음 → gateway를 우회해도 동일한 인증 보장
+- CustomJwtAuthenticationConverter: JWT 클레임으로 principal 직접 구성
+  - user_id 클레임 있음 → 유저 토큰: sub(username)으로 Redis jwt:authorities:{username} 조회 → AuthenticatedUser(id, username, roles) → SecurityContext
+  - client_id 클레임 있음 (또는 user_id 없음) → 시스템 토큰: AuthenticatedClient(clientId) → SecurityContext (ROLE_SYSTEM)
+  - Redis miss → 빈 roles → @PreAuthorize에서 403 (fail-open, 재로그인 유도)
 - CallerPrincipal 인터페이스: AuthenticatedUser / AuthenticatedClient 공통 타입
   - PostController/CommentController: @AuthenticationPrincipal caller: CallerPrincipal 사용 (USER/ADMIN/SYSTEM 모두 허용)
   - LikeController/FollowController/FeedController/ReportController: @AuthenticationPrincipal user: AuthenticatedUser? + null 가드 (SYSTEM 인증 통과 후 사용자 컨텍스트 필요 시 403)
@@ -288,11 +283,8 @@ Clean Architecture 구조
   - CallerPrincipal (interface) — AuthenticatedUser / AuthenticatedClient 공통 타입
   - AuthenticatedUser(id: Long, username: String, roles: List<String>) : CallerPrincipal
   - AuthenticatedClient(clientId: String) : CallerPrincipal
-  - GatewayHeaderAuthenticationFilter:
-    - X-User-Id + X-User-Name + X-User-Authorities → AuthenticatedUser(roles) → SecurityContext
-    - X-Client-Id → AuthenticatedClient → SecurityContext (ROLE_SYSTEM)
-  - CustomJwtAuthenticationConverter (비활성화, 주석처리)
-- infrastructure/config: SecurityConfig (GatewayHeaderAuthenticationFilter 등록, oauth2ResourceServer 제거), RedisConfig (Jackson 3.x), MinioConfig, SwaggerConfig, KafkaTopicConfig (notifications/reports/outbox.events, 파티션 3), KafkaProducerConfig (KafkaTemplate<String,String> 명시적 빈)
+  - CustomJwtAuthenticationConverter: JWT user_id 클레임 → AuthenticatedUser (Redis 권한 조회) / client_id 클레임 → AuthenticatedClient (ROLE_SYSTEM)
+- infrastructure/config: SecurityConfig (oauth2ResourceServer + CustomJwtAuthenticationConverter 등록), RedisConfig (Jackson 3.x), MinioConfig, SwaggerConfig, KafkaTopicConfig (notifications/reports/outbox.events, 파티션 3), KafkaProducerConfig (KafkaTemplate<String,String> 명시적 빈)
 - presentation:
   - PostController / CommentController: @AuthenticationPrincipal caller: CallerPrincipal, @PreAuthorize('USER','ADMIN','SYSTEM')
   - LikeController / FollowController / FeedController / ReportController: @AuthenticationPrincipal user: AuthenticatedUser? + null 가드 403, @PreAuthorize('USER','ADMIN','SYSTEM')
@@ -427,48 +419,36 @@ gateway-server
 - port 1100
 - WebFlux (Spring Cloud Gateway) 기반
 
-JWT 검증 및 헤더 전달
+JWT 검증 (Zero Trust — 서명 검증만, 인가 없음)
 - authorization-server JWK Set으로 JWT 서명 검증 (issuer-uri / jwk-set-uri → localhost:1010)
-- JWT sub = username (유저 토큰) / client_id (클라이언트 토큰) 구분
-- 유저 토큰 (user_id 클레임 존재): Redis jwt:authorities:{username} 조회 후 헤더 주입
-  - X-User-Id: JWT user_id 클레임 (userId.toString())
-  - X-User-Name: JWT sub = username
-  - X-User-Authorities: {ROLE_USER,ROLE_ADMIN 등 comma-separated}
-- 시스템 클라이언트 토큰 (client_credentials, client_id 클레임 존재): X-Client-Id 헤더만 주입
-  - X-Client-Id: JWT client_id 클레임 (RegisteredClient.clientId)
-- JwtUserContextFilter: 수신 헤더 모두 제거 후 재주입 (X-User-Id/Name/Authorities/Client-Id 위조 방지)
-- 하위 서비스(jwt-server)는 JWT 직접 검증 없이 헤더만 신뢰
+- 헤더 주입 없음 — Authorization 헤더를 그대로 downstream 전달
+- 인가 결정은 각 서비스(jwt-server, opaque-server)가 독립적으로 수행
+- Redis 의존성 없음 (rate limiting은 Spring Cloud Gateway 내장 Redis 연동)
 - authorization-server는 gateway를 거치지 않음 (OAuth2 브라우저 리다이렉트 특성상 직접 접근)
 
 라우팅
 - /auth/**      → authorization-server (permitAll, JWT 불필요)
 - /api/**       → jwt-server     (authenticated, rate limit 20req/s burst 40)
-- /admin/**     → opaque-server  (authenticated, rate limit 10req/s burst 20) — ROLE_ADMIN 전용
-- /payments/**  → opaque-server  (authenticated, rate limit 20req/s burst 40) — ROLE_USER 일반 결제
+- /admin/**     → opaque-server  (authenticated, rate limit 10req/s burst 20)
+- /payments/**  → opaque-server  (authenticated, rate limit 20req/s burst 40)
 
 필터 실행 순서
 1. LoggingFilter (order=HIGHEST_PRECEDENCE) — 요청 수신 로그
 2. Spring Security WebFilter — JWT 서명 검증 / permitAll 경로 통과
-3. JwtUserContextFilter (order=0) — 수신 신뢰 헤더 제거 → 유저/클라이언트 토큰 분기 → X-User-* 또는 X-Client-Id 헤더 주입
-4. Spring Cloud Gateway 라우팅
-5. LoggingFilter doFinally — 응답 상태·소요시간 로그
+3. Spring Cloud Gateway 라우팅 + RequestRateLimiter
+4. LoggingFilter doFinally — 응답 상태·소요시간 로그
 
 Rate Limiting
 - Redis 기반 Token Bucket (RequestRateLimiter 필터)
-- KeyResolver: 인증된 요청 → username, 미인증 요청 → IP 주소 (fallback)
+- KeyResolver: 인증된 요청 → principal.name (JWT sub), 미인증 요청 → IP 주소 (fallback)
 
 CORS
 - globalcors: allowed-origins/methods/headers = * (개발 환경)
 - DedupeResponseHeader 필터로 중복 CORS 헤더 제거
 
-ReactiveRedisConfig
-- ReactiveRedisTemplate<String, Any>
-- GenericJacksonJsonRedisSerializer (Jackson 3.x, tools.jackson) + default typing
-- authorization-server / jwt-server와 동일한 직렬화 포맷 (jwt:authorities:{username} 공유)
-
 Clean Architecture 구조
-- infrastructure/config: SecurityConfig, ReactiveRedisConfig, RateLimiterConfig, SwaggerConfig
-- infrastructure/filter: JwtUserContextFilter (GlobalFilter), LoggingFilter (GlobalFilter)
+- infrastructure/config: SecurityConfig (JWT 서명 검증), RateLimiterConfig, SwaggerConfig
+- infrastructure/filter: LoggingFilter (GlobalFilter)
 
 config-server
 - port 1110
