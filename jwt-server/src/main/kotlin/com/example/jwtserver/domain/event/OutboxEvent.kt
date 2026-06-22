@@ -8,6 +8,7 @@ data class OutboxEvent(
     val aggregateType: String,
     val eventType: String,
     val payload: String,
-    val published: Boolean = false,
+    val claimedAt: Instant? = null,
+    val sentAt: Instant? = null,
     val createdAt: Instant = Instant.now()
 )

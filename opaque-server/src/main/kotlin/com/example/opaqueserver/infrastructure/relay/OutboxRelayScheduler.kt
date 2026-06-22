@@ -25,24 +25,33 @@ class OutboxRelayScheduler(
                 return
             }
             try {
-                kafkaTemplate.send(event.topic, event.aggregateKey, event.payload)
+                kafkaTemplate.send(topicFor(event.aggregateType, event.eventType), event.aggregateId, event.payload)
                     .get(5, TimeUnit.SECONDS)
-                outboxRepository.delete(id)
+                outboxRepository.markSent(id)
             } catch (ex: InterruptedException) {
                 outboxRepository.unclaim(id)
                 Thread.currentThread().interrupt()
                 return
             } catch (ex: Exception) {
                 outboxRepository.unclaim(id)
-                log.warn("Failed to relay outbox event id={} topic={}: {}", id, event.topic, ex.message)
+                log.warn("Failed to relay outbox event id={} type={}: {}", id, event.eventType, ex.message)
                 return
             }
         }
     }
 
-    // claim 후 크래시된 이벤트를 주기적으로 복구
     @Scheduled(fixedDelay = 30_000, initialDelay = 10_000)
     fun cleanupStaleClaims() {
         outboxRepository.resetStaleClaims()
+    }
+
+    @Scheduled(fixedDelay = 3_600_000, initialDelay = 60_000)
+    fun cleanupProcessed() {
+        outboxRepository.deleteProcessed()
+    }
+
+    private fun topicFor(aggregateType: String, eventType: String) = when (aggregateType) {
+        "USER" -> "user-management"
+        else   -> eventType.lowercase().replace("_", "-")
     }
 }

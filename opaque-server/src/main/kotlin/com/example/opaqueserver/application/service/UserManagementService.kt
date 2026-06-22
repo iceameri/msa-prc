@@ -38,8 +38,9 @@ class UserManagementService(
     }
 
     private fun buildOutboxEvent(action: String, userId: Long, actor: String) = OutboxEvent(
-        topic = "user-management",
-        aggregateKey = userId.toString(),
+        aggregateId = userId.toString(),
+        aggregateType = "USER",
+        eventType = "${action}_USER",
         payload = objectMapper.writeValueAsString(
             mapOf("action" to action, "userId" to userId, "actor" to actor)
         )

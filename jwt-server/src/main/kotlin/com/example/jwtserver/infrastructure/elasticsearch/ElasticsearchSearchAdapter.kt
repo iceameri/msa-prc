@@ -23,7 +23,7 @@ class ElasticsearchSearchAdapter(
     private val userIndex = of("users")
 
     override fun indexPost(post: Post, hashtags: List<String>) {
-        val authorUsername = userRepository.findById(post.authorId)?.username ?: return
+        val authorUsername = userRepository.findById(post.authorId ?: return)?.username ?: return
         val doc = PostDocument(
             id = post.id.toString(),
             authorUsername = authorUsername,

@@ -242,9 +242,15 @@ authorization_users (Local Read-Model)
 - 장점: authorization-server 장애 시에도 jwt-server 독립 운영 가능, username 변경 시 단일 테이블만 업데이트
 
 Outbox Pattern (알림 이벤트)
-- 도메인 이벤트 발생 시 outbox_events 테이블에 먼저 저장 (같은 트랜잭션), published=false
-- OutboxRelayService (@Scheduled fixedDelay=5s): published=false 이벤트 최대 100건 조회 → Kafka 동기 발행(.get()) → published=true 업데이트; 발행 실패 시 WARN 로그 후 다음 사이클 재시도
+- 도메인 이벤트 발생 시 outbox_events 테이블에 먼저 저장 (같은 트랜잭션)
+- 릴레이 (@Scheduled fixedDelay=1s, initialDelay=5s):
+  - findAndClaim: UPDATE SET claimed_at=NOW() ... FOR UPDATE SKIP LOCKED RETURNING (원자적 pick-up, 다중 인스턴스 중복 방지)
+  - Kafka 동기 발행 (.get(5s)) → markSent: UPDATE SET sent_at=NOW()
+  - 발행 실패 시 unclaim (claimed_at=NULL) → 다음 사이클 재시도
+- stale claim 복구 (@Scheduled fixedDelay=30s): claimed_at > 30초 AND sent_at IS NULL → claimed_at=NULL
+- 처리 완료 이벤트 정리 (@Scheduled fixedDelay=1h): sent_at > 7일 → DELETE
 - 직접 KafkaTemplate 발행 제거 (이중 발행 방지) — 모든 서비스가 outbox 저장만 수행
+- 미처리 추적: 테이블에 남아있는 레코드 = 미처리 (sent_at IS NULL)
 - 토픽 라우팅: POST_CREATED → outbox.events / REPORT_CREATED → reports / 나머지 → notifications
 - 이벤트 타입: POST_CREATED, POST_LIKED, POST_COMMENTED, USER_FOLLOWED, REPORT_CREATED
 
@@ -260,11 +266,12 @@ DDL (jwt_db) — FK 논리적 사용 (REFERENCES 제약 없음)
 - follows: follower_id / following_id (logical FK → authorization_users.id) — PK(follower_id, following_id), CHECK(follower ≠ following)
 - hashtags: id, name(UNIQUE) + post_hashtags: post_id / hashtag_id (logical FK)
 - reports: id, reporter_id (logical FK → authorization_users.id), target_type, target_id, reason
-- outbox_events: id, aggregate_id, aggregate_type, event_type, payload(JSONB), published, created_at
+- outbox_events: id, aggregate_id, aggregate_type, event_type, payload(JSONB), claimed_at(TIMESTAMPTZ), sent_at(TIMESTAMPTZ), created_at
+  - 부분 인덱스: idx_outbox_unclaimed ON (created_at ASC, id ASC) WHERE claimed_at IS NULL AND sent_at IS NULL
 
 Clean Architecture 구조
 - domain: User(id: Long, username), Post(authorId: Long? — nullable, clientId: String? — system 작성 시, authorUsername: String? — JOIN으로 채워짐, PostStatus), Comment(authorId: Long? nullable, clientId: String? nullable, authorUsername: String? — JOIN으로 채워짐), Like, Follow, Hashtag, Report(ReportTargetType), OutboxEvent
-- application/port/out: AuthoritiesCachePort, SearchPort, ImageStoragePort, EventPublishPort, OutboxRepository (save / findUnpublished / markPublished)
+- application/port/out: AuthoritiesCachePort, SearchPort, ImageStoragePort, EventPublishPort, OutboxRepository (save / findAndClaim / markSent / unclaim / resetStaleClaims / deleteProcessed)
 - application/service: UserSyncService (sync=authorization_users UPSERT / resolveId), PostService, CommentService, LikeService, FollowService, FeedService, SearchService (reindexAll: PostgreSQL 전체 배치 조회 → ES 재인덱싱, 500건 단위), ImageService, ReportService
   - PostService/CommentService: CallerPrincipal 파라미터 사용 (resolveAuthor() / canModify() 내부 헬퍼)
     - AuthenticatedUser: sync(id, username) 선행, authorId 사용
@@ -272,10 +279,10 @@ Clean Architecture 구조
   - Post/Comment 저장 시 authorUsername 미저장 — authorization_users/authorization_system_clients JOIN으로 조회 시 획득
   - 알림 이벤트 payload 구조: {postId?, actorUsername, targetUsername} — outbox 저장만, 직접 발행 없음
   - PostService canModify(): AuthenticatedUser → authorId == userId OR ROLE_ADMIN / AuthenticatedClient → clientId 일치
-- infrastructure/persistence: UserJdbcRepository (authorization_users 테이블, sync=UPSERT on id), PostJdbcRepository (모든 조회에 LEFT JOIN authorization_users + LEFT JOIN authorization_system_clients, COALESCE AS author_username; save()에서 authorId/clientId nullable 처리; rs.wasNull()로 NULL authorId 감지), CommentJdbcRepository (동일 패턴), LikeJdbcRepository, FollowJdbcRepository, HashtagJdbcRepository, ReportJdbcRepository, OutboxJdbcRepository (findUnpublished / markPublished 추가)
+- infrastructure/persistence: UserJdbcRepository (authorization_users 테이블, sync=UPSERT on id), PostJdbcRepository (모든 조회에 LEFT JOIN authorization_users + LEFT JOIN authorization_system_clients, COALESCE AS author_username; save()에서 authorId/clientId nullable 처리; rs.wasNull()로 NULL authorId 감지), CommentJdbcRepository (동일 패턴), LikeJdbcRepository, FollowJdbcRepository, HashtagJdbcRepository, ReportJdbcRepository, OutboxJdbcRepository (findAndClaim: FOR UPDATE SKIP LOCKED RETURNING / markSent / unclaim / resetStaleClaims / deleteProcessed)
 - infrastructure/elasticsearch: ElasticsearchSearchAdapter (PostDocument / UserDocument, NativeQuery; 인덱스 없을 때 exception chain 순회로 index_not_found 감지 → 빈 배열 반환)
 - infrastructure/minio: MinioImageAdapter (버킷 자동 생성)
-- infrastructure/kafka: KafkaEventPublisher (KafkaTemplate<String, String>), OutboxRelayService (@Scheduled fixedDelay=5s, findUnpublished(100) → Kafka 동기 발행 → markPublished), UserSyncEventConsumer (user-sync 토픽 → userSyncService.sync()), UsernameUpdateEventConsumer (user.username.updated 토픽 → userSyncService.sync() 1행 UPDATE, posts/comments 직접 수정 없음)
+- infrastructure/kafka: KafkaEventPublisher (KafkaTemplate<String, String>), OutboxRelayService (@Scheduled fixedDelay=1s initialDelay=5s — findAndClaim(100) → Kafka 동기 발행(.get(5s)) → markSent; 실패 시 unclaim; cleanupStaleClaims 30s 주기; cleanupProcessed 1h 주기), UserSyncEventConsumer (user-sync 토픽 → userSyncService.sync()), UsernameUpdateEventConsumer (user.username.updated 토픽 → userSyncService.sync() 1행 UPDATE, posts/comments 직접 수정 없음)
 - infrastructure/cache: RedisAuthoritiesCache (jwt:authorities:{username} read-only)
 - infrastructure/security:
   - CallerPrincipal (interface) — AuthenticatedUser / AuthenticatedClient 공통 타입
@@ -368,7 +375,7 @@ opaque-server
 Kafka 토픽
 - 구독(Consumer): notifications, reports, payment.saga
 - 발행(Producer): payment.saga, report-actions, user-active (KafkaTemplate 직접 발행)
-- Outbox 릴레이 발행: user-management (OutboxRelayScheduler → 1초 주기, FOR UPDATE SKIP LOCKED)
+- Outbox 릴레이 발행: user-management (OutboxRelayScheduler → 1초 주기, FOR UPDATE SKIP LOCKED, markSent 후 7일 보존)
 
 authorization-server Kafka
 - 구독(Consumer): user-management, user-active
@@ -393,16 +400,16 @@ DDL (opaque_db) — FK 논리적 사용
   - actor_id: 행위자 식별 기준 (변경 불변), actor_username: 행위 시점 username 보존 (감사 이력)
 - notifications: id, recipient_id VARCHAR(50) (logical FK → authorization_db.users.id), recipient_username VARCHAR(50) (snapshot), type, content, status, sent_at, created_at
   - recipient_id: 수신자 식별/이메일 조회 기준, recipient_username: 발송 시점 username 보존
-- outbox_events: id, topic, aggregate_key, payload(TEXT), claimed_at(TIMESTAMPTZ), created_at
-  - 부분 인덱스: idx_outbox_unclaimed ON (created_at ASC, id ASC) WHERE claimed_at IS NULL
+- outbox_events: id, aggregate_id, aggregate_type, event_type, payload(JSONB), claimed_at(TIMESTAMPTZ), sent_at(TIMESTAMPTZ), created_at
+  - 부분 인덱스: idx_outbox_unclaimed ON (created_at ASC, id ASC) WHERE claimed_at IS NULL AND sent_at IS NULL
 
 Clean Architecture 구조
-- domain: Payment(PaymentStatus), PaymentSaga(SagaStep/SagaStatus), Report(ReportStatus), AuditLog(actorId+actorUsername), Notification(recipientId+recipientUsername, NotificationStatus), User(id/username/email), OutboxEvent(id/topic/aggregateKey/payload/claimedAt/createdAt), OutboxRepository(save/findAndClaim/delete/unclaim/resetStaleClaims)
+- domain: Payment(PaymentStatus), PaymentSaga(SagaStep/SagaStatus), Report(ReportStatus), AuditLog(actorId+actorUsername), Notification(recipientId+recipientUsername, NotificationStatus), User(id/username/email), OutboxEvent(id/aggregateId/aggregateType/eventType/payload/claimedAt/sentAt/createdAt), OutboxRepository(save/findAndClaim/markSent/unclaim/resetStaleClaims/deleteProcessed)
 - domain/user: User(id: String, username, email), UserRepository(findById(id: String))
 - application/port/out: EventPublishPort, EmailPort
 - application/service: UserManagementService (actorId+actorUsername 모두 수신 — audit_log + outbox_events 단일 트랜잭션), PaymentService (userId.toString()을 actorId로 사용), ReportProcessingService (actorId+actorUsername 수신), AuditService (log(actorId, actorUsername, ...)), NotificationService (send(recipientId, recipientUsername, ...)), StatisticsService (유저 통계 제외)
-- infrastructure/persistence: PaymentJdbcRepository (findByIdAndUserId/findByUserId 추가), PaymentSagaJdbcRepository, ReportJdbcRepository, AuditJdbcRepository (actor_id+actor_username INSERT/SELECT), NotificationJdbcRepository (recipient_id+recipient_username INSERT), OutboxJdbcRepository (findAndClaim: UPDATE ... FOR UPDATE SKIP LOCKED RETURNING)
-- infrastructure/relay: OutboxRelayScheduler (@Scheduled fixedDelay=1s initialDelay=5s — findAndClaim → Kafka send → delete; 실패 시 unclaim + return; cleanupStaleClaims 30s 주기)
+- infrastructure/persistence: PaymentJdbcRepository (findByIdAndUserId/findByUserId 추가), PaymentSagaJdbcRepository, ReportJdbcRepository, AuditJdbcRepository (actor_id+actor_username INSERT/SELECT), NotificationJdbcRepository (recipient_id+recipient_username INSERT), OutboxJdbcRepository (findAndClaim: UPDATE SET claimed_at=NOW() FOR UPDATE SKIP LOCKED RETURNING / markSent / unclaim / resetStaleClaims / deleteProcessed)
+- infrastructure/relay: OutboxRelayScheduler (@Scheduled fixedDelay=1s initialDelay=5s — findAndClaim → Kafka send(.get(5s)) → markSent; 실패 시 unclaim + return; cleanupStaleClaims 30s 주기; cleanupProcessed 1h 주기)
 - infrastructure/rest: UserRestRepository (UserRepository 구현체, auth-server /internal/users/{id} REST 호출 — 실패 시 null 반환, notification email 조회용)
 - infrastructure/kafka: KafkaEventPublisher, NotificationEventConsumer (targetId+target 추출 → send(recipientId, recipientUsername, ...)), ReportEventConsumer, PaymentSagaConsumer
 - infrastructure/mail: MailAdapter (JavaMailSender)
