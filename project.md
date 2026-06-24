@@ -225,16 +225,30 @@ authorization_system_clients (Local Read-Model for machine clients)
 - 초기 데이터: jwt-server, opaque-server (authorization_db + jwt_db 모두 DML 삽입 필요)
 
 authorization_users (Local Read-Model)
-- jwt_db.authorization_users(id BIGINT PK, username) — authorization_db users의 로컬 복사본
-- sync(userId, username): authorization_users에 UPSERT (id 기준, username 갱신)
+- jwt_db.authorization_users(id BIGINT PK, username, updated_at TIMESTAMPTZ) — authorization_db users의 로컬 복사본
+- sync(userId, username, updatedAt): authorization_users에 UPSERT (id 기준, username 갱신)
   - 호출 경로 1: authorization-server가 user-sync 토픽 발행 → UserSyncEventConsumer 소비
   - 호출 경로 2: username 변경 시 user.username.updated 토픽 → UsernameUpdateEventConsumer 소비 → sync() 호출 (단 1행 UPDATE)
-  - 호출 경로 3: 서비스 내부 직접 호출 (write 서비스 선행 sync)
+  - 호출 경로 3: 서비스 내부 직접 호출 (write 서비스 선행 sync, updatedAt = Instant.now() 기본값)
 - resolveId(username): username으로 로컬 DB 조회 → userId 반환 (공개 엔드포인트용)
 - authorization_users.id는 authorization_db users.id와 동일값 (논리적 FK, BIGSERIAL 아님)
 - 모든 도메인(post/comment/like/follow 등)은 authorization_users.id를 FK로 참조
 - posts/comments는 author_username 컬럼 없음 — 조회 시 authorization_users LEFT JOIN으로 현재 username 획득
 - 장점: authorization-server 장애 시에도 jwt-server 독립 운영 가능, username 변경 시 단일 테이블만 업데이트
+
+Idempotent Consumer (Kafka 메시지 중복 처리 방지)
+- processed_kafka_events 테이블: event_id(topic:partition:offset), topic, processed_at
+  - PRIMARY KEY(event_id), INSERT ON CONFLICT DO NOTHING → affectedRows 0이면 중복으로 판정
+  - 30일 경과 레코드 자동 정리 (@Scheduled cron="0 0 3 * * *")
+- IdempotentEventGuard.runIfNew(eventId, topic, block): @Transactional
+  - insertIfAbsent() 성공 시(새 이벤트) block() 실행, 실패 시(중복) 건너뜀
+  - processed_kafka_events 삽입과 도메인 변경이 같은 트랜잭션 → 원자적 보장
+
+out-of-order 보호 (순서 역전 메시지 무시)
+- authorization_users.updated_at: 이벤트 발행 시각 저장
+- UPSERT WHERE 조건: WHERE authorization_users.updated_at < EXCLUDED.updated_at
+  - Kafka 파티션 키(userId)로 순서 보장되지만, 파티션 수 변경 등 예외 상황에서도 방어
+  - updatedAt 없는 구버전 메시지는 Instant.EPOCH 처리 (신규 row면 INSERT, 기존 row면 WHERE 차단)
 
 Outbox Pattern (알림 이벤트)
 - 도메인 이벤트 발생 시 outbox_events 테이블에 먼저 저장 (같은 트랜잭션)
@@ -251,7 +265,8 @@ Outbox Pattern (알림 이벤트)
 
 DDL (jwt_db) — FK 논리적 사용 (REFERENCES 제약 없음)
 - authorization_system_clients: client_id(VARCHAR PK), display_name
-- authorization_users: id(BIGINT PK, authorization_db users.id와 동일값), username (UNIQUE INDEX)
+- authorization_users: id(BIGINT PK, authorization_db users.id와 동일값), username (UNIQUE INDEX), updated_at TIMESTAMPTZ (이벤트 발행 시각 — out-of-order 판정 기준)
+- processed_kafka_events: event_id VARCHAR(200) PK (topic:partition:offset), topic VARCHAR(100), processed_at TIMESTAMPTZ DEFAULT NOW()
 - posts: id, author_id BIGINT NULL (logical FK → authorization_users.id), client_id VARCHAR NULL (logical FK → authorization_system_clients.client_id), title, content, image_url, like_count, comment_count, status, created_at, updated_at
   - XOR CHECK: (author_id IS NOT NULL AND client_id IS NULL) OR (author_id IS NULL AND client_id IS NOT NULL)
   - 조회: LEFT JOIN authorization_users + LEFT JOIN authorization_system_clients, COALESCE(u.username, sc.display_name) AS author_username
@@ -265,26 +280,27 @@ DDL (jwt_db) — FK 논리적 사용 (REFERENCES 제약 없음)
   - 부분 인덱스: idx_outbox_unclaimed ON (created_at ASC, id ASC) WHERE claimed_at IS NULL AND sent_at IS NULL
 
 Clean Architecture 구조
-- domain: User(id: Long, username), Post(authorId: Long? — nullable, clientId: String? — system 작성 시, authorUsername: String? — JOIN으로 채워짐, PostStatus), Comment(authorId: Long? nullable, clientId: String? nullable, authorUsername: String? — JOIN으로 채워짐), Like, Follow, Hashtag, Report(ReportTargetType), OutboxEvent
+- domain: User(id: Long, username, updatedAt: Instant), Post(authorId: Long? — nullable, clientId: String? — system 작성 시, authorUsername: String? — JOIN으로 채워짐, PostStatus), Comment(authorId: Long? nullable, clientId: String? nullable, authorUsername: String? — JOIN으로 채워짐), Like, Follow, Hashtag, Report(ReportTargetType), OutboxEvent
+- domain/event: ProcessedEventRepository (insertIfAbsent / deleteOlderThan)
 - application/port/out: AuthoritiesCachePort, SearchPort, ImageStoragePort, EventPublishPort, OutboxRepository (save / findAndClaim / markSent / unclaim / resetStaleClaims / deleteProcessed)
-- application/service: UserSyncService (sync=authorization_users UPSERT / resolveId), PostService, CommentService, LikeService, FollowService, FeedService, SearchService (reindexAll: PostgreSQL 전체 배치 조회 → ES 재인덱싱, 500건 단위), ImageService, ReportService
+- application/service: UserSyncService (sync(userId, username, updatedAt=Instant.now())=authorization_users UPSERT / resolveId), IdempotentEventGuard (@Transactional runIfNew(eventId, topic, block) + @Scheduled cleanup 매일 03:00), PostService, CommentService, LikeService, FollowService, FeedService, SearchService (reindexAll: PostgreSQL 전체 배치 조회 → ES 재인덱싱, 500건 단위), ImageService, ReportService
   - PostService/CommentService: CallerPrincipal 파라미터 사용 (resolveAuthor() / canModify() 내부 헬퍼)
     - AuthenticatedUser: sync(id, username) 선행, authorId 사용
     - AuthenticatedClient: sync 없음, clientId 사용, displayName = clientId
   - Post/Comment 저장 시 authorUsername 미저장 — authorization_users/authorization_system_clients JOIN으로 조회 시 획득
   - 알림 이벤트 payload 구조: {postId?, actorUsername, targetUsername} — outbox 저장만, 직접 발행 없음
   - PostService canModify(): AuthenticatedUser → authorId == userId OR ROLE_ADMIN / AuthenticatedClient → clientId 일치
-- infrastructure/persistence: UserJdbcRepository (authorization_users 테이블, sync=UPSERT on id), PostJdbcRepository (모든 조회에 LEFT JOIN authorization_users + LEFT JOIN authorization_system_clients, COALESCE AS author_username; save()에서 authorId/clientId nullable 처리; rs.wasNull()로 NULL authorId 감지), CommentJdbcRepository (동일 패턴), LikeJdbcRepository, FollowJdbcRepository, HashtagJdbcRepository, ReportJdbcRepository, OutboxJdbcRepository (findAndClaim: FOR UPDATE SKIP LOCKED RETURNING / markSent / unclaim / resetStaleClaims / deleteProcessed)
+- infrastructure/persistence: UserJdbcRepository (authorization_users 테이블, sync(userId, username, updatedAt: Instant)=ON CONFLICT DO UPDATE WHERE updated_at < EXCLUDED.updated_at; JDBC 바인딩: Timestamp.from(updatedAt)), ProcessedEventJdbcRepository (INSERT ON CONFLICT DO NOTHING → affectedRows 판정), PostJdbcRepository (모든 조회에 LEFT JOIN authorization_users + LEFT JOIN authorization_system_clients, COALESCE AS author_username; save()에서 authorId/clientId nullable 처리; rs.wasNull()로 NULL authorId 감지), CommentJdbcRepository (동일 패턴), LikeJdbcRepository, FollowJdbcRepository, HashtagJdbcRepository, ReportJdbcRepository, OutboxJdbcRepository (findAndClaim: FOR UPDATE SKIP LOCKED RETURNING / markSent / unclaim / resetStaleClaims / deleteProcessed)
 - infrastructure/elasticsearch: ElasticsearchSearchAdapter (PostDocument / UserDocument, NativeQuery; 인덱스 없을 때 exception chain 순회로 index_not_found 감지 → 빈 배열 반환)
 - infrastructure/minio: MinioImageAdapter (버킷 자동 생성)
-- infrastructure/kafka: KafkaEventPublisher (KafkaTemplate<String, String>), OutboxRelayService (@Scheduled fixedDelay=1s initialDelay=5s — findAndClaim(100) → Kafka 동기 발행(.get(5s)) → markSent; 실패 시 unclaim; cleanupStaleClaims 30s 주기; cleanupProcessed 1h 주기), UserSyncEventConsumer (user-sync 토픽 → userSyncService.sync()), UsernameUpdateEventConsumer (user.username.updated 토픽 → userSyncService.sync() 1행 UPDATE, posts/comments 직접 수정 없음)
+- infrastructure/kafka: KafkaEventPublisher (KafkaTemplate<String, String>), OutboxRelayService (@Scheduled fixedDelay=1s initialDelay=5s — findAndClaim(100) → Kafka 동기 발행(.get(5s)) → markSent; 실패 시 unclaim; cleanupStaleClaims 30s 주기; cleanupProcessed 1h 주기), UserSyncEventConsumer (user-sync 토픽, ConsumerRecord<String,String> — idempotentEventGuard.runIfNew + updatedAt 파싱 → userSyncService.sync()), UsernameUpdateEventConsumer (user.username.updated 토픽, 동일 패턴 — posts/comments 직접 수정 없음)
 - infrastructure/cache: RedisAuthoritiesCache (jwt:authorities:{username} read-only)
 - infrastructure/security:
   - CallerPrincipal (interface) — AuthenticatedUser / AuthenticatedClient 공통 타입
   - AuthenticatedUser(id: Long, username: String, roles: List<String>) : CallerPrincipal
   - AuthenticatedClient(clientId: String) : CallerPrincipal
   - CustomJwtAuthenticationConverter: JWT user_id 클레임 → AuthenticatedUser (Redis 권한 조회) / client_id 클레임 → AuthenticatedClient (ROLE_SYSTEM)
-- infrastructure/config: SecurityConfig (oauth2ResourceServer + CustomJwtAuthenticationConverter 등록), RedisConfig (Jackson 3.x), MinioConfig, SwaggerConfig, KafkaTopicConfig (notifications/reports/outbox.events, 파티션 3), KafkaProducerConfig (KafkaTemplate<String,String> 명시적 빈)
+- infrastructure/config: SecurityConfig (oauth2ResourceServer + CustomJwtAuthenticationConverter 등록), RedisConfig (Jackson 3.x), MinioConfig, SwaggerConfig, KafkaTopicConfig (notifications/reports/outbox.events, 파티션 3), KafkaProducerConfig (KafkaTemplate<String,String> 명시적 빈), KafkaConsumerConfig (@EnableKafka + ConcurrentKafkaListenerContainerFactory, StringDeserializer, auto-commit)
 - presentation:
   - PostController / CommentController: @AuthenticationPrincipal caller: CallerPrincipal, @PreAuthorize('USER','ADMIN','SYSTEM')
   - LikeController / FollowController / FeedController / ReportController: @AuthenticationPrincipal user: AuthenticatedUser? + null 가드 403, @PreAuthorize('USER','ADMIN','SYSTEM')
@@ -377,10 +393,11 @@ authorization-server Kafka
     - RESTORE → setStatusAndEnabled(true, "ACTIVE") + user 캐시 evict
   - user-active payload: {"userId": Long} → user_activity UPSERT
 - 발행(Producer): user-sync, user.username.updated
-  - user-sync payload: {"userId": Long, "username": String}
+  - user-sync payload: {"userId": Long, "username": String, "updatedAt": String(ISO-8601)}
     - UserJdbcRepository.save() 완료 후 발행 (INSERT/UPDATE 모두)
+    - updatedAt: 발행 직전 Instant.now() 기록 — jwt-server Consumer의 out-of-order 판정 기준
     - jwt-server가 소비하여 authorization_users UPSERT (Local Read-Model 동기화)
-  - user.username.updated payload: {"userId": Long, "newUsername": String}
+  - user.username.updated payload: {"userId": Long, "newUsername": String, "updatedAt": String(ISO-8601)}
     - UserJdbcRepository.updateUsername() 완료 후 발행
     - jwt-server가 소비하여 authorization_users 단 1행 UPDATE (posts/comments 직접 수정 없음)
 
