@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS users
     created_at     TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     mfa_enabled    BOOLEAN      NOT NULL DEFAULT FALSE,
     mfa_secret     VARCHAR(64),
+    version        BIGINT       NOT NULL DEFAULT 1,
     CONSTRAINT pk_users PRIMARY KEY (user_id),
     CONSTRAINT uk_users_username UNIQUE (username),
     CONSTRAINT uk_users_email UNIQUE (email)

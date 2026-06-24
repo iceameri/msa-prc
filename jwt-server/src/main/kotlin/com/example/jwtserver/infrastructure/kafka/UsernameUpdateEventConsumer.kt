@@ -7,7 +7,6 @@ import org.slf4j.LoggerFactory
 import org.springframework.kafka.annotation.KafkaListener
 import org.springframework.stereotype.Component
 import tools.jackson.databind.ObjectMapper
-import java.time.Instant
 
 @Component
 class UsernameUpdateEventConsumer(
@@ -38,14 +37,10 @@ class UsernameUpdateEventConsumer(
                 log.error("Missing newUsername in user.username.updated message")
                 return
             }
-            // updatedAt 없는 구버전 메시지는 Instant.EPOCH로 처리:
-            // DB에 이미 실제 시각이 저장되어 있으면 WHERE 조건에서 걸러지고,
-            // 레코드가 없으면 INSERT로 진행되므로 안전
-            val updatedAt = payload["updatedAt"]?.toString()?.let { runCatching { Instant.parse(it) }.getOrNull() }
-                ?: Instant.EPOCH
+            val version = payload["version"]?.toString()?.toLongOrNull() ?: 0L
 
             idempotentEventGuard.runIfNew(eventId, record.topic()) {
-                userSyncService.sync(userId, newUsername, updatedAt)
+                userSyncService.sync(userId, newUsername, version)
             }
         } catch (ex: Exception) {
             log.error("Invalid user.username.updated message format", ex)

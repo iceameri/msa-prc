@@ -94,23 +94,25 @@ class UserJdbcRepository(
             )!!
             val saved = user.copy(id = userId)
             syncAuthorities(userId, user.authorities)
-            userSyncEventPublisher.publish(userId, user.username)
+            userSyncEventPublisher.publish(userId, user.username, version = 1L)
             saved
         } else {
-            jdbcTemplate.update(
+            val newVersion = jdbcTemplate.queryForObject(
                 """
                 UPDATE  authorization_db.public.users
                 SET     password = ?, email = ?, full_name = ?, enabled = ?, status = ?,
-                        login_attempts = ?, locked_until = ?
+                        login_attempts = ?, locked_until = ?, version = version + 1
                 WHERE   user_id = ?
+                RETURNING version
                 """.trimIndent(),
+                Long::class.java,
                 user.password, user.email, user.fullName,
                 user.enabled, user.status, user.loginAttempts,
                 user.lockedUntil?.let { Timestamp.from(it) },
                 user.id
-            )
+            )!!
             syncAuthorities(user.id, user.authorities)
-            userSyncEventPublisher.publish(user.id, user.username)
+            userSyncEventPublisher.publish(user.id, user.username, newVersion)
             user
         }
     }
@@ -165,11 +167,12 @@ class UserJdbcRepository(
     }
 
     override fun updateUsername(userId: Long, newUsername: String) {
-        jdbcTemplate.update(
-            "UPDATE authorization_db.public.users SET username = ? WHERE user_id = ?",
+        val newVersion = jdbcTemplate.queryForObject(
+            "UPDATE authorization_db.public.users SET username = ?, version = version + 1 WHERE user_id = ? RETURNING version",
+            Long::class.java,
             newUsername, userId
-        )
-        userSyncEventPublisher.publishUsernameUpdate(userId, newUsername)
+        )!!
+        userSyncEventPublisher.publishUsernameUpdate(userId, newUsername, newVersion)
     }
 
     private fun syncAuthorities(userId: Long, authorities: Set<String>) {
