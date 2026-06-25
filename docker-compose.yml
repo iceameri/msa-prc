@@ -12,7 +12,7 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - postgres_auth_data:/var/lib/postgresql/data
+      - ./infra/postgres-auth:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U admin"]
       interval: 10s
@@ -32,7 +32,7 @@ services:
     ports:
       - "5433:5432"
     volumes:
-      - postgres_jwt_data:/var/lib/postgresql/data
+      - ./infra/postgres-jwt:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U admin"]
       interval: 10s
@@ -52,7 +52,7 @@ services:
     ports:
       - "5434:5432"
     volumes:
-      - postgres_opaque_data:/var/lib/postgresql/data
+      - ./infra/postgres-opaque:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U admin"]
       interval: 10s
@@ -69,7 +69,7 @@ services:
     ports:
       - "6379:6379"
     volumes:
-      - redis_data:/data
+      - ./infra/redis:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -98,8 +98,10 @@ services:
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_LOG_RETENTION_HOURS: 168
+      KAFKA_LOG_RETENTION_BYTES: -1
     volumes:
-      - kafka_data:/var/lib/kafka/data
+      - ./infra/kafka:/var/lib/kafka/data
     healthcheck:
       test: ["CMD", "kafka-topics", "--bootstrap-server", "localhost:9092", "--list"]
       interval: 15s
@@ -176,7 +178,7 @@ services:
       MINIO_ROOT_PASSWORD: minioadmin
     command: server /data --console-address ":9001"
     volumes:
-      - minio_data:/data
+      - ./infra/minio:/data
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
       interval: 10s
@@ -197,7 +199,7 @@ services:
     ports:
       - "9200:9200"
     volumes:
-      - elasticsearch_data:/usr/share/elasticsearch/data
+      - ./infra/elasticsearch:/usr/share/elasticsearch/data
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
       interval: 15s
@@ -251,7 +253,7 @@ services:
       - "9090:9090"
     volumes:
       - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
-      - prometheus_data:/prometheus
+      - ./infra/prometheus:/prometheus
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:
@@ -269,7 +271,7 @@ services:
       GF_SECURITY_ADMIN_USER: admin
       GF_SECURITY_ADMIN_PASSWORD: admin
     volumes:
-      - grafana_data:/var/lib/grafana
+      - ./infra/grafana:/var/lib/grafana
     networks:
       - msa-network
 
@@ -287,13 +289,3 @@ networks:
   msa-network:
     driver: bridge
 
-volumes:
-  postgres_auth_data:
-  postgres_jwt_data:
-  postgres_opaque_data:
-  redis_data:
-  kafka_data:
-  minio_data:
-  elasticsearch_data:
-  prometheus_data:
-  grafana_data:

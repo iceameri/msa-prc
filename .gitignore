@@ -19,5 +19,8 @@ log/
 **/.kotlin/
 **/.vscode/
 
+# Infrastructure data volumes
+infra/
+
 # Spring Initializr boilerplate (각 서비스 .gitignore 중복 제외)
 **/HELP.md
