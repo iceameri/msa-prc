@@ -14,7 +14,11 @@ class NotificationJdbcRepository(private val jdbcTemplate: JdbcTemplate) : Notif
         val keyHolder = GeneratedKeyHolder()
         jdbcTemplate.update({ con ->
             con.prepareStatement(
-                "INSERT INTO opaque_db.public.notifications (recipient_id, recipient_username, type, content) VALUES (?, ?, ?, ?)", arrayOf("id")
+                """
+                INSERT INTO opaque_db.public.notifications (recipient_id, recipient_username, type, content)
+                VALUES (?, ?, ?, ?)
+                """.trimIndent(),
+                arrayOf("id")
             ).apply {
                 setString(1, notification.recipientId)
                 setString(2, notification.recipientUsername)
@@ -27,9 +31,17 @@ class NotificationJdbcRepository(private val jdbcTemplate: JdbcTemplate) : Notif
 
     override fun updateStatus(id: Long, status: NotificationStatus) {
         val sql = if (status == NotificationStatus.SENT)
-            "UPDATE opaque_db.public.notifications SET status = ?, sent_at = NOW() WHERE id = ?"
+            """
+            UPDATE  opaque_db.public.notifications
+            SET     status = ?, sent_at = NOW()
+            WHERE   id = ?
+            """.trimIndent()
         else
-            "UPDATE opaque_db.public.notifications SET status = ? WHERE id = ?"
+            """
+            UPDATE  opaque_db.public.notifications
+            SET     status = ?
+            WHERE   id = ?
+            """.trimIndent()
         jdbcTemplate.update(sql, status.name, id)
     }
 }

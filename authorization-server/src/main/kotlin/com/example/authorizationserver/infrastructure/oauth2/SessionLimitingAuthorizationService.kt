@@ -36,9 +36,10 @@ class SessionLimitingAuthorizationService(
     private fun enforceSessionLimit(principalName: String, registeredClientId: String) {
         val ids = jdbcTemplate.queryForList<String>(
             """
-            SELECT id FROM authorization_db.public.oauth2_authorization
-            WHERE principal_name = ? AND registered_client_id = ?
-            ORDER BY COALESCE(access_token_issued_at, authorization_code_issued_at) ASC
+            SELECT  id
+            FROM    authorization_db.public.oauth2_authorization
+            WHERE   principal_name = ? AND registered_client_id = ?
+            ORDER BY COALESCE(access_token_issued_at, authorization_code_issued_at)
             """.trimIndent(),
             principalName, registeredClientId
         )

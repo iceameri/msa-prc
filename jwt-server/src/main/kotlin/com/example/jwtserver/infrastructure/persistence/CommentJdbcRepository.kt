@@ -34,7 +34,11 @@ class CommentJdbcRepository(private val jdbcTemplate: JdbcTemplate) : CommentRep
         val keyHolder = GeneratedKeyHolder()
         jdbcTemplate.update({ con ->
             con.prepareStatement(
-                "INSERT INTO jwt_db.public.comments (post_id, author_id, client_id, content) VALUES (?, ?, ?, ?)",
+                """
+                INSERT INTO jwt_db.public.comments
+                (post_id, author_id, client_id, content)
+                VALUES (?, ?, ?, ?)
+                """.trimIndent(),
                 arrayOf("id")
             ).apply {
                 setLong(1, comment.postId)
@@ -48,13 +52,23 @@ class CommentJdbcRepository(private val jdbcTemplate: JdbcTemplate) : CommentRep
 
     override fun update(comment: Comment) {
         jdbcTemplate.update(
-            "UPDATE jwt_db.public.comments SET content = ?, updated_at = NOW() WHERE id = ?",
+            """
+            UPDATE  jwt_db.public.comments
+            SET     content = ?, updated_at = NOW()
+            WHERE   id = ?
+            """.trimIndent(),
             comment.content, comment.id
         )
     }
 
     override fun delete(id: Long) {
-        jdbcTemplate.update("DELETE FROM jwt_db.public.comments WHERE id = ?", id)
+        jdbcTemplate.update(
+            """
+            DELETE FROM jwt_db.public.comments
+            WHERE   id = ?
+            """.trimIndent(),
+            id
+        )
     }
 
     private fun mapRow(rs: ResultSet, @Suppress("UNUSED_PARAMETER") rowNum: Int): Comment {

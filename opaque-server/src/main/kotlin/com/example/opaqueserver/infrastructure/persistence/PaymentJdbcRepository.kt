@@ -4,6 +4,7 @@ import com.example.opaqueserver.domain.payment.Payment
 import com.example.opaqueserver.domain.payment.PaymentRepository
 import com.example.opaqueserver.domain.payment.PaymentStatus
 import org.springframework.jdbc.core.JdbcTemplate
+import org.springframework.jdbc.core.queryForObject
 import org.springframework.jdbc.support.GeneratedKeyHolder
 import org.springframework.stereotype.Repository
 import java.math.BigDecimal
@@ -13,22 +14,55 @@ import java.sql.ResultSet
 class PaymentJdbcRepository(private val jdbcTemplate: JdbcTemplate) : PaymentRepository {
 
     override fun findById(id: Long): Payment? =
-        jdbcTemplate.query("SELECT * FROM opaque_db.public.payments WHERE id = ?", ::mapRow, id).firstOrNull()
+        jdbcTemplate.query(
+            """
+            SELECT  *
+            FROM    opaque_db.public.payments
+            WHERE   id = ?
+            """.trimIndent(),
+            ::mapRow, id
+        ).firstOrNull()
 
     override fun findByOrderId(orderId: String): Payment? =
-        jdbcTemplate.query("SELECT * FROM opaque_db.public.payments WHERE order_id = ?", ::mapRow, orderId).firstOrNull()
+        jdbcTemplate.query(
+            """
+            SELECT  *
+            FROM    opaque_db.public.payments
+            WHERE   order_id = ?
+            """.trimIndent(),
+            ::mapRow, orderId
+        ).firstOrNull()
 
     override fun findByIdAndUserId(id: Long, userId: Long): Payment? =
-        jdbcTemplate.query("SELECT * FROM opaque_db.public.payments WHERE id = ? AND user_id = ?", ::mapRow, id, userId).firstOrNull()
+        jdbcTemplate.query(
+            """
+            SELECT  *
+            FROM    opaque_db.public.payments
+            WHERE   id = ? AND user_id = ?
+            """.trimIndent(),
+            ::mapRow, id, userId
+        ).firstOrNull()
 
     override fun findByUserId(userId: Long): List<Payment> =
-        jdbcTemplate.query("SELECT * FROM opaque_db.public.payments WHERE user_id = ? ORDER BY created_at DESC", ::mapRow, userId)
+        jdbcTemplate.query(
+            """
+            SELECT  *
+            FROM    opaque_db.public.payments
+            WHERE   user_id = ?
+            ORDER BY created_at DESC
+            """.trimIndent(),
+            ::mapRow, userId
+        )
 
     override fun save(payment: Payment): Payment {
         val keyHolder = GeneratedKeyHolder()
         jdbcTemplate.update({ con ->
             con.prepareStatement(
-                "INSERT INTO opaque_db.public.payments (user_id, order_id, amount, status) VALUES (?, ?, ?, ?)", arrayOf("id")
+                """
+                INSERT INTO opaque_db.public.payments (user_id, order_id, amount, status)
+                VALUES (?, ?, ?, ?)
+                """.trimIndent(),
+                arrayOf("id")
             ).apply {
                 setLong(1, payment.userId)
                 setString(2, payment.orderId)
@@ -40,13 +74,23 @@ class PaymentJdbcRepository(private val jdbcTemplate: JdbcTemplate) : PaymentRep
     }
 
     override fun updateStatus(id: Long, status: PaymentStatus) {
-        jdbcTemplate.update("UPDATE opaque_db.public.payments SET status = ?, updated_at = NOW() WHERE id = ?", status.name, id)
+        jdbcTemplate.update(
+            """
+            UPDATE  opaque_db.public.payments
+            SET     status = ?, updated_at = NOW()
+            WHERE   id = ?
+            """.trimIndent(),
+            status.name, id
+        )
     }
 
     override fun sumCompletedAmount(): BigDecimal =
-        jdbcTemplate.queryForObject(
-            "SELECT COALESCE(SUM(amount), 0) FROM opaque_db.public.payments WHERE status = 'COMPLETED'",
-            BigDecimal::class.java
+        jdbcTemplate.queryForObject<BigDecimal>(
+            """
+            SELECT  COALESCE(SUM(amount), 0)
+            FROM    opaque_db.public.payments
+            WHERE   status = 'COMPLETED'
+            """.trimIndent()
         ) ?: BigDecimal.ZERO
 
     private fun mapRow(rs: ResultSet, @Suppress("UNUSED_PARAMETER") n: Int) = Payment(

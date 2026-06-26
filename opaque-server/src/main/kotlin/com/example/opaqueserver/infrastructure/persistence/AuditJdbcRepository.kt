@@ -11,14 +11,23 @@ class AuditJdbcRepository(private val jdbcTemplate: JdbcTemplate) : AuditReposit
 
     override fun save(log: AuditLog) {
         jdbcTemplate.update(
-            "INSERT INTO opaque_db.public.audit_logs (actor_id, actor_username, action, target_type, target_id, detail) VALUES (?, ?, ?, ?, ?, ?)",
+            """
+            INSERT INTO opaque_db.public.audit_logs
+            (actor_id, actor_username, action, target_type, target_id, detail)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """.trimIndent(),
             log.actorId, log.actorUsername, log.action, log.targetType, log.targetId, log.detail
         )
     }
 
     override fun findAll(offset: Int, limit: Int): List<AuditLog> =
         jdbcTemplate.query(
-            "SELECT * FROM opaque_db.public.audit_logs ORDER BY created_at DESC LIMIT ? OFFSET ?",
+            """
+            SELECT  *
+            FROM    opaque_db.public.audit_logs
+            ORDER BY created_at DESC
+            LIMIT ? OFFSET ?
+            """.trimIndent(),
             ::mapRow, limit, offset
         )
 

@@ -5,6 +5,7 @@ import com.example.authorizationserver.domain.user.UserRepository
 import com.example.authorizationserver.infrastructure.kafka.UserSyncEventPublisher
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.jdbc.core.ResultSetExtractor
+import org.springframework.jdbc.core.queryForObject
 import org.springframework.stereotype.Repository
 import org.springframework.transaction.annotation.Transactional
 import java.sql.Timestamp
@@ -80,14 +81,13 @@ class UserJdbcRepository(
     @Transactional
     override fun save(user: User): User {
         return if (user.id == null) {
-            val userId = jdbcTemplate.queryForObject(
+            val userId = jdbcTemplate.queryForObject<Long>(
                 """
                 INSERT INTO authorization_db.public.users
-                    (username, password, email, full_name, enabled, status, login_attempts, locked_until)
+                (username, password, email, full_name, enabled, status, login_attempts, locked_until)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 RETURNING user_id
                 """.trimIndent(),
-                Long::class.java,
                 user.username, user.password, user.email, user.fullName,
                 user.enabled, user.status, user.loginAttempts,
                 user.lockedUntil?.let { Timestamp.from(it) }
@@ -97,7 +97,7 @@ class UserJdbcRepository(
             userSyncEventPublisher.publish(userId, user.username, version = 1L)
             saved
         } else {
-            val newVersion = jdbcTemplate.queryForObject(
+            val newVersion = jdbcTemplate.queryForObject<Long>(
                 """
                 UPDATE  authorization_db.public.users
                 SET     password = ?, email = ?, full_name = ?, enabled = ?, status = ?,
@@ -105,7 +105,6 @@ class UserJdbcRepository(
                 WHERE   user_id = ?
                 RETURNING version
                 """.trimIndent(),
-                Long::class.java,
                 user.password, user.email, user.fullName,
                 user.enabled, user.status, user.loginAttempts,
                 user.lockedUntil?.let { Timestamp.from(it) },
@@ -119,57 +118,89 @@ class UserJdbcRepository(
 
     override fun lockUser(username: String, lockedUntil: Instant) {
         jdbcTemplate.update(
-            "UPDATE authorization_db.public.users SET locked_until = ? WHERE username = ?",
+            """
+            UPDATE  authorization_db.public.users
+            SET     locked_until = ?
+            WHERE   username = ?
+            """.trimIndent(),
             Timestamp.from(lockedUntil), username
         )
     }
 
     override fun resetLoginAttempts(username: String) {
         jdbcTemplate.update(
-            "UPDATE authorization_db.public.users SET login_attempts = 0, locked_until = NULL WHERE username = ?",
+            """
+            UPDATE  authorization_db.public.users
+            SET     login_attempts = 0, locked_until = NULL
+            WHERE   username = ?
+            """.trimIndent(),
             username
         )
     }
 
     override fun updateMfaSettings(username: String, mfaEnabled: Boolean, mfaSecret: String?) {
         jdbcTemplate.update(
-            "UPDATE authorization_db.public.users SET mfa_enabled = ?, mfa_secret = ? WHERE username = ?",
+            """
+            UPDATE  authorization_db.public.users
+            SET     mfa_enabled = ?, mfa_secret = ?
+            WHERE   username = ?
+            """.trimIndent(),
             mfaEnabled, mfaSecret, username
         )
     }
 
     override fun setEnabled(username: String, enabled: Boolean) {
         jdbcTemplate.update(
-            "UPDATE authorization_db.public.users SET enabled = ? WHERE username = ?",
+            """
+            UPDATE  authorization_db.public.users
+            SET     enabled = ?
+            WHERE   username = ?
+            """.trimIndent(),
             enabled, username
         )
     }
 
     override fun setEnabledById(userId: Long, enabled: Boolean) {
         jdbcTemplate.update(
-            "UPDATE authorization_db.public.users SET enabled = ? WHERE user_id = ?",
+            """
+            UPDATE  authorization_db.public.users
+            SET     enabled = ?
+            WHERE   user_id = ?
+            """.trimIndent(),
             enabled, userId
         )
     }
 
     override fun updateStatusById(userId: Long, status: String) {
         jdbcTemplate.update(
-            "UPDATE authorization_db.public.users SET status = ? WHERE user_id = ?",
+            """
+            UPDATE  authorization_db.public.users
+            SET     status = ?
+            WHERE   user_id = ?
+            """.trimIndent(),
             status, userId
         )
     }
 
     override fun setStatusAndEnabled(userId: Long, enabled: Boolean, status: String) {
         jdbcTemplate.update(
-            "UPDATE authorization_db.public.users SET enabled = ?, status = ? WHERE user_id = ?",
+            """
+            UPDATE  authorization_db.public.users
+            SET     enabled = ?, status = ?
+            WHERE   user_id = ?
+            """.trimIndent(),
             enabled, status, userId
         )
     }
 
     override fun updateUsername(userId: Long, newUsername: String) {
-        val newVersion = jdbcTemplate.queryForObject(
-            "UPDATE authorization_db.public.users SET username = ?, version = version + 1 WHERE user_id = ? RETURNING version",
-            Long::class.java,
+        val newVersion = jdbcTemplate.queryForObject<Long>(
+            """
+            UPDATE  authorization_db.public.users
+            SET     username = ?, version = version + 1
+            WHERE   user_id = ?
+            RETURNING version
+            """.trimIndent(),
             newUsername, userId
         )!!
         userSyncEventPublisher.publishUsernameUpdate(userId, newUsername, newVersion)
@@ -177,12 +208,18 @@ class UserJdbcRepository(
 
     private fun syncAuthorities(userId: Long, authorities: Set<String>) {
         jdbcTemplate.update(
-            "DELETE FROM authorization_db.public.user_authorities WHERE user_id = ?",
+            """
+            DELETE FROM authorization_db.public.user_authorities
+            WHERE   user_id = ?
+            """.trimIndent(),
             userId
         )
         if (authorities.isEmpty()) return
         jdbcTemplate.batchUpdate(
-            "INSERT INTO authorization_db.public.user_authorities (user_id, authority) VALUES (?, ?)",
+            """
+            INSERT INTO authorization_db.public.user_authorities (user_id, authority)
+            VALUES (?, ?)
+            """.trimIndent(),
             authorities.map { arrayOf<Any>(userId, it) }
         )
     }

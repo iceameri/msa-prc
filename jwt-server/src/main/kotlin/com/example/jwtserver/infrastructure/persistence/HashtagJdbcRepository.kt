@@ -11,11 +11,23 @@ import java.sql.ResultSet
 class HashtagJdbcRepository(private val jdbcTemplate: JdbcTemplate) : HashtagRepository {
 
     override fun findByName(name: String): Hashtag? =
-        jdbcTemplate.query("SELECT id, name FROM jwt_db.public.hashtags WHERE name = ?", ::mapRow, name).firstOrNull()
+        jdbcTemplate.query(
+            """
+            SELECT  id, name
+            FROM    jwt_db.public.hashtags
+            WHERE   name = ?
+            """.trimIndent(),
+            ::mapRow, name
+        ).firstOrNull()
 
     override fun findByPostId(postId: Long): List<Hashtag> =
         jdbcTemplate.query(
-            "SELECT h.id, h.name FROM jwt_db.public.hashtags h JOIN jwt_db.public.post_hashtags ph ON h.id = ph.hashtag_id WHERE ph.post_id = ?",
+            """
+            SELECT  h.id, h.name
+            FROM    jwt_db.public.hashtags h
+            JOIN    jwt_db.public.post_hashtags ph ON h.id = ph.hashtag_id
+            WHERE   ph.post_id = ?
+            """.trimIndent(),
             ::mapRow, postId
         )
 
@@ -25,7 +37,11 @@ class HashtagJdbcRepository(private val jdbcTemplate: JdbcTemplate) : HashtagRep
             val keyHolder = GeneratedKeyHolder()
             jdbcTemplate.update({ con ->
                 con.prepareStatement(
-                    "INSERT INTO jwt_db.public.hashtags (name) VALUES (?) ON CONFLICT (name) DO NOTHING", arrayOf("id")
+                    """
+                    INSERT INTO jwt_db.public.hashtags (name)
+                    VALUES (?) ON CONFLICT (name) DO NOTHING
+                    """.trimIndent(),
+                    arrayOf("id")
                 ).apply { setString(1, lower) }
             }, keyHolder)
             findByName(lower)!!
@@ -34,13 +50,22 @@ class HashtagJdbcRepository(private val jdbcTemplate: JdbcTemplate) : HashtagRep
 
     override fun linkToPost(postId: Long, hashtagId: Long) {
         jdbcTemplate.update(
-            "INSERT INTO jwt_db.public.post_hashtags (post_id, hashtag_id) VALUES (?, ?) ON CONFLICT DO NOTHING",
+            """
+            INSERT INTO jwt_db.public.post_hashtags (post_id, hashtag_id)
+            VALUES (?, ?) ON CONFLICT DO NOTHING
+            """.trimIndent(),
             postId, hashtagId
         )
     }
 
     override fun unlinkFromPost(postId: Long) {
-        jdbcTemplate.update("DELETE FROM jwt_db.public.post_hashtags WHERE post_id = ?", postId)
+        jdbcTemplate.update(
+            """
+            DELETE FROM jwt_db.public.post_hashtags
+            WHERE   post_id = ?
+            """.trimIndent(),
+            postId
+        )
     }
 
     private fun mapRow(rs: ResultSet, @Suppress("UNUSED_PARAMETER") rowNum: Int) =

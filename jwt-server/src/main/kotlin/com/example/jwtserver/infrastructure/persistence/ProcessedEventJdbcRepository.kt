@@ -11,8 +11,7 @@ class ProcessedEventJdbcRepository(private val jdbcTemplate: JdbcTemplate) : Pro
         val affected = jdbcTemplate.update(
             """
             INSERT INTO jwt_db.public.processed_kafka_events (event_id, topic)
-            VALUES (?, ?)
-            ON CONFLICT (event_id) DO NOTHING
+            VALUES (?, ?) ON CONFLICT (event_id) DO NOTHING
             """.trimIndent(),
             eventId, topic
         )
@@ -21,7 +20,10 @@ class ProcessedEventJdbcRepository(private val jdbcTemplate: JdbcTemplate) : Pro
 
     override fun deleteOlderThan(days: Long) {
         jdbcTemplate.update(
-            "DELETE FROM jwt_db.public.processed_kafka_events WHERE processed_at < NOW() - (? || ' days')::INTERVAL",
+            """
+            DELETE FROM jwt_db.public.processed_kafka_events
+            WHERE   processed_at < NOW() - (? || ' days')::INTERVAL
+            """.trimIndent(),
             days.toString()
         )
     }

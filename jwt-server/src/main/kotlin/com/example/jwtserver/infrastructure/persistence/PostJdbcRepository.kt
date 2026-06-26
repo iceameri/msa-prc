@@ -48,11 +48,13 @@ class PostJdbcRepository(private val jdbcTemplate: JdbcTemplate) : PostRepositor
 
     override fun findByHashtag(hashtagName: String, offset: Int, limit: Int): List<Post> =
         jdbcTemplate.query(
-            """$selectBase
-               JOIN jwt_db.public.post_hashtags ph ON p.id = ph.post_id
-               JOIN jwt_db.public.hashtags h       ON ph.hashtag_id = h.id
-               WHERE h.name = ? AND p.status = 'ACTIVE'
-               ORDER BY p.created_at DESC LIMIT ? OFFSET ?""",
+            """
+            $selectBase
+            JOIN    jwt_db.public.post_hashtags ph ON p.id = ph.post_id
+            JOIN    jwt_db.public.hashtags h       ON ph.hashtag_id = h.id
+            WHERE   h.name = ? AND p.status = 'ACTIVE'
+            ORDER BY p.created_at DESC LIMIT ? OFFSET ?
+            """.trimIndent(),
             ::mapRow, hashtagName, limit, offset
         )
 
@@ -60,7 +62,10 @@ class PostJdbcRepository(private val jdbcTemplate: JdbcTemplate) : PostRepositor
         val keyHolder = GeneratedKeyHolder()
         jdbcTemplate.update({ con ->
             con.prepareStatement(
-                "INSERT INTO jwt_db.public.posts (author_id, client_id, title, content, image_url) VALUES (?, ?, ?, ?, ?)",
+                """
+                INSERT INTO jwt_db.public.posts (author_id, client_id, title, content, image_url)
+                VALUES (?, ?, ?, ?, ?)
+                """.trimIndent(),
                 arrayOf("id")
             ).apply {
                 if (post.authorId != null) setLong(1, post.authorId) else setNull(1, Types.BIGINT)
@@ -75,29 +80,68 @@ class PostJdbcRepository(private val jdbcTemplate: JdbcTemplate) : PostRepositor
 
     override fun update(post: Post) {
         jdbcTemplate.update(
-            "UPDATE jwt_db.public.posts SET title = ?, content = ?, image_url = ?, updated_at = NOW() WHERE id = ?",
+            """
+            UPDATE  jwt_db.public.posts
+            SET     title = ?, content = ?, image_url = ?, updated_at = NOW()
+            WHERE   id = ?
+            """.trimIndent(),
             post.title, post.content, post.imageUrl, post.id
         )
     }
 
     override fun delete(id: Long) {
-        jdbcTemplate.update("UPDATE jwt_db.public.posts SET status = 'DELETED', updated_at = NOW() WHERE id = ?", id)
+        jdbcTemplate.update(
+            """
+            UPDATE  jwt_db.public.posts
+            SET     status = 'DELETED', updated_at = NOW()
+            WHERE   id = ?
+            """.trimIndent(),
+            id
+        )
     }
 
     override fun incrementLikeCount(id: Long) {
-        jdbcTemplate.update("UPDATE jwt_db.public.posts SET like_count = like_count + 1 WHERE id = ?", id)
+        jdbcTemplate.update(
+            """
+            UPDATE  jwt_db.public.posts
+            SET     like_count = like_count + 1
+            WHERE   id = ?
+            """.trimIndent(),
+            id
+        )
     }
 
     override fun decrementLikeCount(id: Long) {
-        jdbcTemplate.update("UPDATE jwt_db.public.posts SET like_count = GREATEST(0, like_count - 1) WHERE id = ?", id)
+        jdbcTemplate.update(
+            """
+            UPDATE  jwt_db.public.posts
+            SET     like_count = GREATEST(0, like_count - 1)
+            WHERE   id = ?
+            """.trimIndent(),
+            id
+        )
     }
 
     override fun incrementCommentCount(id: Long) {
-        jdbcTemplate.update("UPDATE jwt_db.public.posts SET comment_count = comment_count + 1 WHERE id = ?", id)
+        jdbcTemplate.update(
+            """
+            UPDATE  jwt_db.public.posts
+            SET     comment_count = comment_count + 1
+            WHERE   id = ?
+            """.trimIndent(),
+            id
+        )
     }
 
     override fun decrementCommentCount(id: Long) {
-        jdbcTemplate.update("UPDATE jwt_db.public.posts SET comment_count = GREATEST(0, comment_count - 1) WHERE id = ?", id)
+        jdbcTemplate.update(
+            """
+            UPDATE  jwt_db.public.posts
+            SET     comment_count = GREATEST(0, comment_count - 1)
+            WHERE   id = ?
+            """.trimIndent(),
+            id
+        )
     }
 
     private fun mapRow(rs: ResultSet, @Suppress("UNUSED_PARAMETER") rowNum: Int): Post {

@@ -19,7 +19,11 @@ class InactiveUserCleanupService(
 
     fun run(): Int {
         val userIds = jdbcTemplate.queryForList<Long>(
-            "SELECT user_id FROM authorization_db.public.user_activity WHERE last_active_at < NOW() - INTERVAL '90 days'"
+            """
+            SELECT  user_id
+            FROM    authorization_db.public.user_activity
+            WHERE   last_active_at < NOW() - INTERVAL '90 days'
+            """.trimIndent()
         )
         userIds.filterNotNull().forEach { userId ->
             kafkaTemplate.send("user-management", userId.toString(), """{"action":"SUSPEND","userId":$userId}""")

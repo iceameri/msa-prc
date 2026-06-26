@@ -13,7 +13,8 @@ class OutboxJdbcRepository(private val jdbcTemplate: JdbcTemplate) : OutboxRepos
         jdbcTemplate.update(
             """
             INSERT INTO opaque_db.public.outbox_events (aggregate_id, aggregate_type, event_type, payload)
-            VALUES (?, ?, ?, ?::jsonb)""",
+            VALUES (?, ?, ?, ?::jsonb)
+            """.trimIndent(),
             event.aggregateId, event.aggregateType, event.eventType, event.payload
         )
     }
@@ -25,10 +26,11 @@ class OutboxJdbcRepository(private val jdbcTemplate: JdbcTemplate) : OutboxRepos
             """
             UPDATE opaque_db.public.outbox_events SET claimed_at = NOW()
             WHERE id IN (
-                SELECT id FROM opaque_db.public.outbox_events
-                WHERE claimed_at IS NULL AND sent_at IS NULL
+                SELECT  id
+                FROM    opaque_db.public.outbox_events
+                WHERE   claimed_at IS NULL AND sent_at IS NULL
                 ORDER BY created_at, id
-                LIMIT ?
+                LIMIT   ?
                 FOR UPDATE SKIP LOCKED
             )
             RETURNING id, aggregate_id, aggregate_type, event_type, payload::text, claimed_at, sent_at, created_at
@@ -38,13 +40,23 @@ class OutboxJdbcRepository(private val jdbcTemplate: JdbcTemplate) : OutboxRepos
 
     override fun markSent(id: Long) {
         jdbcTemplate.update(
-            "UPDATE opaque_db.public.outbox_events SET sent_at = NOW() WHERE id = ?", id
+            """
+            UPDATE  opaque_db.public.outbox_events
+            SET     sent_at = NOW()
+            WHERE   id = ?
+            """.trimIndent(),
+            id
         )
     }
 
     override fun unclaim(id: Long) {
         jdbcTemplate.update(
-            "UPDATE opaque_db.public.outbox_events SET claimed_at = NULL WHERE id = ?", id
+            """
+            UPDATE  opaque_db.public.outbox_events
+            SET     claimed_at = NULL
+            WHERE   id = ?
+            """.trimIndent(),
+            id
         )
     }
 
@@ -53,8 +65,10 @@ class OutboxJdbcRepository(private val jdbcTemplate: JdbcTemplate) : OutboxRepos
     override fun resetStaleClaims() {
         jdbcTemplate.update(
             """
-            UPDATE opaque_db.public.outbox_events SET claimed_at = NULL
-            WHERE claimed_at IS NOT NULL AND sent_at IS NULL AND claimed_at < NOW() - INTERVAL '30 seconds'
+            UPDATE  opaque_db.public.outbox_events SET claimed_at = NULL
+            WHERE   claimed_at IS NOT NULL AND
+                    sent_at IS NULL AND
+                    claimed_at < NOW() - INTERVAL '30 seconds'
             """.trimIndent()
         )
     }
@@ -62,7 +76,11 @@ class OutboxJdbcRepository(private val jdbcTemplate: JdbcTemplate) : OutboxRepos
     // 7일 이상 지난 전송 완료 이벤트를 삭제한다.
     override fun deleteProcessed() {
         jdbcTemplate.update(
-            "DELETE FROM opaque_db.public.outbox_events WHERE sent_at IS NOT NULL AND sent_at < NOW() - INTERVAL '7 days'"
+            """
+            DELETE FROM opaque_db.public.outbox_events
+            WHERE   sent_at IS NOT NULL AND
+                    sent_at < NOW() - INTERVAL '7 days'
+            """.trimIndent()
         )
     }
 

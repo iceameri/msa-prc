@@ -11,13 +11,21 @@ class UserJdbcRepository(private val jdbcTemplate: JdbcTemplate) : UserRepositor
 
     override fun findById(id: Long): User? =
         jdbcTemplate.query(
-            "SELECT id, username, version, created_at FROM jwt_db.public.authorization_users WHERE id = ?",
+            """
+            SELECT  id, username, version, created_at
+            FROM    jwt_db.public.authorization_users
+            WHERE   id = ?
+            """.trimIndent(),
             ::mapRow, id
         ).firstOrNull()
 
     override fun findByUsername(username: String): User? =
         jdbcTemplate.query(
-            "SELECT id, username, version, created_at FROM jwt_db.public.authorization_users WHERE username = ?",
+            """
+            SELECT  id, username, version, created_at
+            FROM    jwt_db.public.authorization_users
+            WHERE   username = ?
+            """.trimIndent(),
             ::mapRow, username
         ).firstOrNull()
 
@@ -37,9 +45,9 @@ class UserJdbcRepository(private val jdbcTemplate: JdbcTemplate) : UserRepositor
     }
 
     private fun mapRow(rs: ResultSet, @Suppress("UNUSED_PARAMETER") rowNum: Int) = User(
-        id        = rs.getLong("id"),
-        username  = rs.getString("username"),
-        version   = rs.getLong("version"),
+        id = rs.getLong("id"),
+        username = rs.getString("username"),
+        version = rs.getLong("version"),
         createdAt = rs.getTimestamp("created_at").toInstant()
     )
 }
