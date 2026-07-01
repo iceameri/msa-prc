@@ -40,7 +40,7 @@ class UsernameUpdateEventConsumer(
             val version = payload["version"]?.toString()?.toLongOrNull() ?: 0L
 
             idempotentEventGuard.runIfNew(eventId, record.topic()) {
-                userSyncService.sync(userId, newUsername, version)
+                userSyncService.syncUsername(userId, newUsername, version)
             }
         } catch (ex: Exception) {
             log.error("Invalid user.username.updated message format", ex)

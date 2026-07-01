@@ -37,10 +37,12 @@ class UserSyncEventConsumer(
                 log.error("Missing username in user-sync message")
                 return
             }
+            val enabled = payload["enabled"]?.toString()?.toBooleanStrictOrNull() ?: true
+            val status  = payload["status"]?.toString() ?: "ACTIVE"
             val version = payload["version"]?.toString()?.toLongOrNull() ?: 0L
 
             idempotentEventGuard.runIfNew(eventId, record.topic()) {
-                userSyncService.sync(userId, username, version)
+                userSyncService.sync(userId, username, enabled, status, version)
             }
         } catch (ex: Exception) {
             log.error("Invalid user-sync message format", ex)
