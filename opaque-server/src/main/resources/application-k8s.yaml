@@ -1,0 +1,37 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://postgres-opaque:5432/opaque_db
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+
+  data:
+    redis:
+      host: redis
+      port: 6379
+
+  kafka:
+    bootstrap-servers: kafka:9092
+
+  mail:
+    username: ${MAIL_USERNAME}
+    password: ${MAIL_PASSWORD}
+
+  security:
+    oauth2:
+      resourceserver:
+        opaquetoken:
+          introspection-uri: ${AUTH_ISSUER_URI}/oauth2/introspect
+          client-secret: ${OPAQUE_CLIENT_SECRET}
+
+management:
+  zipkin:
+    tracing:
+      endpoint: http://zipkin:9411/api/v2/spans
+
+logging:
+  logstash:
+    host: logstash
+    port: 5000
+  level:
+    root: INFO
+    com.example: INFO

@@ -5,12 +5,9 @@ spring:
   application:
     name: authorization-server
 
-  config:
-    import: "optional:configserver:http://localhost:1110"
-
   # ── Database ────────────────────────────────────────────
   datasource:
-    url: jdbc:postgresql://localhost:5432/authorization_db   # postgres-auth
+    url: jdbc:postgresql://localhost:5432/authorization_db
     username: admin
     password: admin
     driver-class-name: org.postgresql.Driver
@@ -48,40 +45,13 @@ spring:
     oauth2:
       authorizationserver:
         issuer: http://localhost:1010
-#      client:
-#        registration:
-#          google:
-#            client-id:       # Google Cloud Console에서 발급
-#            client-secret:   # Google Cloud Console에서 발급
-#            scope: openid, profile, email
-#          github:
-#            client-id:       # GitHub Developer Settings에서 발급
-#            client-secret:   # GitHub Developer Settings에서 발급
-#            scope: read:user, user:email
-
-# ── Eureka ────────────────────────────────────────────────
-eureka:
-  client:
-    service-url:
-      defaultZone: http://admin:admin@localhost:1120/eureka/
-    healthcheck:
-      enabled: true
-    registry-fetch-interval-seconds: 5        # 기본 30초 → 레지스트리 갱신 주기
-  instance:
-    prefer-ip-address: true
-    initial-status: STARTING                  # 헬스체크 통과 전까지 트래픽 차단
-    instance-id: ${spring.application.name}:${server.port}
-    lease-renewal-interval-in-seconds: 10     # 기본 30초 → 하트비트 주기
-    lease-expiration-duration-in-seconds: 30  # 기본 90초 → 이 시간 동안 하트비트 없으면 DOWN
-    health-check-url-path: /actuator/health
-    status-page-url-path: /actuator/info
 
 # ── Actuator & Monitoring ─────────────────────────────────
 management:
   endpoints:
     web:
       exposure:
-        include: health, info, prometheus, refresh
+        include: health, info, prometheus
   endpoint:
     health:
       show-details: always
@@ -97,6 +67,15 @@ management:
   tracing:
     sampling:
       probability: 1.0
+
+# ── Logging ───────────────────────────────────────────────
+logging:
+  logstash:
+    host: localhost
+    port: 5000
+  level:
+    root: DEBUG
+    com.example: DEBUG
 
 # ── Resilience4j ──────────────────────────────────────────
 resilience4j:
