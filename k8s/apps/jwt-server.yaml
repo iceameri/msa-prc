@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jwt-server
+  namespace: msa
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: jwt-server
+  template:
+    metadata:
+      labels:
+        app: jwt-server
+    spec:
+      containers:
+        - name: jwt-server
+          image: iceameri/jwt-server:0.0.1-SNAPSHOT  # 빌드 후 실제 이미지로 교체
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 1020
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              value: "k8s"
+          envFrom:
+            - secretRef:
+                name: jwt-server-secret
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 1020
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 1020
+            initialDelaySeconds: 60
+            periodSeconds: 15
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1Gi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: jwt-server
+  namespace: msa
+spec:
+  selector:
+    app: jwt-server
+  ports:
+    - name: http
+      port: 80
+      targetPort: 1020
+  type: ClusterIP

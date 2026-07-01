@@ -1,0 +1,71 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: authorization-server
+  namespace: msa
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: authorization-server
+  template:
+    metadata:
+      labels:
+        app: authorization-server
+    spec:
+      containers:
+        - name: authorization-server
+          image: iceameri/authorization-server:0.0.1-SNAPSHOT  # 빌드 후 실제 이미지로 교체
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 1010
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              value: "k8s"
+          envFrom:
+            - secretRef:
+                name: authorization-server-secret
+          volumeMounts:
+            - name: rsa-keys
+              mountPath: /app/keys
+              readOnly: true
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 1010
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 1010
+            initialDelaySeconds: 60
+            periodSeconds: 15
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1Gi"
+      volumes:
+        - name: rsa-keys
+          secret:
+            secretName: rsa-keypair
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: authorization-server
+  namespace: msa
+spec:
+  selector:
+    app: authorization-server
+  ports:
+    - name: http
+      port: 80
+      targetPort: 1010
+  type: ClusterIP
