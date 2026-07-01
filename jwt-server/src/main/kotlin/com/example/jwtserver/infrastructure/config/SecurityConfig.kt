@@ -8,6 +8,7 @@ import org.springframework.security.config.annotation.method.configuration.Enabl
 import org.springframework.security.config.annotation.web.builders.HttpSecurity
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity
 import org.springframework.security.config.http.SessionCreationPolicy
+import org.springframework.http.HttpMethod
 import org.springframework.security.web.SecurityFilterChain
 import org.springframework.web.cors.CorsConfiguration
 import org.springframework.web.cors.CorsConfigurationSource
@@ -29,6 +30,7 @@ class SecurityConfig(
         }
         http.authorizeHttpRequests {
             it.dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
+            it.requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
             it.requestMatchers("/actuator/health", "/v3/api-docs/**", "/swagger-ui/**").permitAll()
             it.anyRequest().authenticated()
         }

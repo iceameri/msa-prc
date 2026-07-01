@@ -7,6 +7,7 @@ import org.springframework.security.config.annotation.method.configuration.Enabl
 import org.springframework.security.config.annotation.web.builders.HttpSecurity
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity
 import org.springframework.security.config.http.SessionCreationPolicy
+import org.springframework.http.HttpMethod
 import org.springframework.security.web.SecurityFilterChain
 import org.springframework.web.cors.CorsConfiguration
 import org.springframework.web.cors.CorsConfigurationSource
@@ -23,6 +24,7 @@ class SecurityConfig(private val introspector: CustomOpaqueTokenIntrospector) {
         http.csrf { it.disable() }
         http.sessionManagement { it.sessionCreationPolicy(SessionCreationPolicy.STATELESS) }
         http.authorizeHttpRequests {
+            it.requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
             it.requestMatchers("/actuator/health", "/v3/api-docs/**", "/swagger-ui/**").permitAll()
             it.requestMatchers("/admin/**").hasAnyRole("ADMIN", "SYSTEM")
             it.requestMatchers("/payments/**").hasAnyRole("USER", "ADMIN")
