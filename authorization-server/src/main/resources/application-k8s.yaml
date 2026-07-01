@@ -6,7 +6,7 @@ spring:
 
   data:
     redis:
-      host: redis
+      host: redis-master  # Bitnami Redis Helm chart의 master 서비스명
       port: 6379
 
   kafka:
@@ -20,6 +20,22 @@ spring:
     oauth2:
       authorizationserver:
         issuer: ${AUTH_ISSUER_URI}
+
+  sql:
+    init:
+      mode: always
+      schema-locations:
+        - classpath:sql/ddl/users.sql
+        - classpath:sql/ddl/user_authorities.sql
+        - classpath:sql/ddl/user_activity.sql
+        - classpath:sql/ddl/system_clients.sql
+        - classpath:sql/ddl/oauth2_registered_client.sql
+        - classpath:sql/ddl/oauth2_authorization.sql
+        - classpath:sql/ddl/oauth2_authorization_consent.sql
+
+# RSA 키페어 마운트 경로 (k8s Secret → /app/keys 볼륨)
+rsa:
+  key-path: /app/keys
 
 management:
   zipkin:

@@ -6,7 +6,7 @@ spring:
 
   data:
     redis:
-      host: redis
+      host: redis-master  # Bitnami Redis Helm chart의 master 서비스명
       port: 6379
 
   kafka:
@@ -22,6 +22,17 @@ spring:
         opaquetoken:
           introspection-uri: ${AUTH_ISSUER_URI}/oauth2/introspect
           client-secret: ${OPAQUE_CLIENT_SECRET}
+
+  sql:
+    init:
+      mode: always
+      schema-locations:
+        - classpath:sql/ddl/payments.sql
+        - classpath:sql/ddl/payment_sagas.sql
+        - classpath:sql/ddl/reports.sql
+        - classpath:sql/ddl/audit_logs.sql
+        - classpath:sql/ddl/notifications.sql
+        - classpath:sql/ddl/outbox_events.sql
 
 management:
   zipkin:

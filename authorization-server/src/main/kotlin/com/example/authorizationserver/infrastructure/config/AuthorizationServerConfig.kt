@@ -9,6 +9,7 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.jdbc.core.JdbcTemplate
+import org.springframework.security.converter.RsaKeyConverters
 import org.springframework.security.oauth2.jwt.JwtDecoder
 import org.springframework.security.oauth2.server.authorization.JdbcOAuth2AuthorizationConsentService
 import org.springframework.security.oauth2.server.authorization.JdbcOAuth2AuthorizationService
@@ -18,6 +19,7 @@ import org.springframework.security.oauth2.server.authorization.client.JdbcRegis
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClientRepository
 import org.springframework.security.config.annotation.web.configuration.OAuth2AuthorizationServerConfiguration
 import org.springframework.security.oauth2.server.authorization.settings.AuthorizationServerSettings
+import java.io.File
 import java.security.KeyPair
 import java.security.KeyPairGenerator
 import java.security.interfaces.RSAPrivateKey
@@ -27,7 +29,10 @@ import java.util.UUID
 @Configuration
 class AuthorizationServerConfig(
     @Value("\${spring.security.oauth2.authorizationserver.issuer}")
-    private val issuer: String
+    private val issuer: String,
+    // K8s: Secret 볼륨 마운트 경로 (비어있으면 로컬 개발용 인메모리 키 생성)
+    @Value("\${rsa.key-path:}")
+    private val rsaKeyPath: String
 ) {
 
     @Bean
@@ -54,13 +59,26 @@ class AuthorizationServerConfig(
 
     @Bean
     fun jwkSource(): JWKSource<SecurityContext> {
-        val keyPair = generateRsaKey()
+        val (keyPair, keyId) = if (rsaKeyPath.isNotBlank()) {
+            loadRsaKey() to "rsa-key"          // 고정 ID → 재기동 후에도 기존 토큰 유효
+        } else {
+            generateRsaKey() to UUID.randomUUID().toString()  // 로컬 개발용 인메모리
+        }
         val rsaKey = RSAKey.Builder(keyPair.public as RSAPublicKey)
             .privateKey(keyPair.private as RSAPrivateKey)
-            .keyID(UUID.randomUUID().toString())
+            .keyID(keyId)
             .build()
-        // TODO: 운영 환경에서는 키를 파일/Vault에서 로드하도록 변경 (재기동 시 기존 토큰 무효화 방지)
         return ImmutableJWKSet(JWKSet(rsaKey))
+    }
+
+    private fun loadRsaKey(): KeyPair {
+        val privateKey = File("$rsaKeyPath/private.pem").inputStream().use {
+            RsaKeyConverters.pkcs8().convert(it)
+        }
+        val publicKey = File("$rsaKeyPath/public.pem").inputStream().use {
+            RsaKeyConverters.x509().convert(it)
+        }
+        return KeyPair(requireNotNull(publicKey), requireNotNull(privateKey))
     }
 
     @Bean

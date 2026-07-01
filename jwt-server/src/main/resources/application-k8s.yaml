@@ -6,7 +6,7 @@ spring:
 
   data:
     redis:
-      host: redis
+      host: redis-master  # Bitnami Redis Helm chart의 master 서비스명
       port: 6379
 
   kafka:
@@ -21,6 +21,21 @@ spring:
         jwt:
           issuer-uri: ${AUTH_ISSUER_URI}
           jwk-set-uri: ${AUTH_ISSUER_URI}/oauth2/jwks
+
+  sql:
+    init:
+      mode: always
+      schema-locations:
+        - classpath:sql/ddl/authorization_users.sql
+        - classpath:sql/ddl/authorization_system_clients.sql
+        - classpath:sql/ddl/posts.sql
+        - classpath:sql/ddl/comments.sql
+        - classpath:sql/ddl/likes.sql
+        - classpath:sql/ddl/follows.sql
+        - classpath:sql/ddl/hashtags.sql
+        - classpath:sql/ddl/reports.sql
+        - classpath:sql/ddl/outbox_events.sql
+        - classpath:sql/ddl/processed_kafka_events.sql
 
 minio:
   endpoint: http://minio:9000
