@@ -19,14 +19,6 @@ repositories {
     mavenCentral()
 }
 
-extra["springCloudVersion"] = "2025.1.1"
-
-dependencyManagement {
-    imports {
-        mavenBom("org.springframework.cloud:spring-cloud-dependencies:${property("springCloudVersion")}")
-    }
-}
-
 dependencies {
     implementation("org.springframework.boot:spring-boot-starter-webmvc")
     implementation("org.jetbrains.kotlin:kotlin-reflect")
@@ -62,10 +54,6 @@ dependencies {
     // Tracing - Brave + Zipkin (Spring Boot 4.0: spring-boot-starter-zipkin으로 통합)
     implementation("org.springframework.boot:spring-boot-starter-zipkin")
     implementation("io.zipkin.brave:brave")
-
-    // Service Discovery & Config
-    implementation("org.springframework.cloud:spring-cloud-starter-netflix-eureka-client")
-    implementation("org.springframework.cloud:spring-cloud-starter-config")
 
     // Swagger
     implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.3")
