@@ -15,6 +15,9 @@ import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.security.web.SecurityFilterChain
 import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint
 import org.springframework.security.web.util.matcher.MediaTypeRequestMatcher
+import org.springframework.web.cors.CorsConfiguration
+import org.springframework.web.cors.CorsConfigurationSource
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource
 
 @Configuration
 @EnableWebSecurity
@@ -32,6 +35,7 @@ class SecurityConfig(
                 http.securityMatcher(authorizationServer.endpointsMatcher)
                 authorizationServer.oidc(Customizer.withDefaults())
             }
+            .cors { it.configurationSource(corsConfigurationSource()) }
             .authorizeHttpRequests { it.anyRequest().authenticated() }
             .exceptionHandling {
                 it.defaultAuthenticationEntryPointFor(
@@ -46,6 +50,7 @@ class SecurityConfig(
     @Bean
     @Order(2)
     fun defaultSecurityFilterChain(http: HttpSecurity): SecurityFilterChain {
+        http.cors { it.configurationSource(corsConfigurationSource()) }
         http.authorizeHttpRequests {
             it.requestMatchers(
                 "/login", "/error", "/actuator/health",
@@ -69,6 +74,19 @@ class SecurityConfig(
             it.clearAuthentication(true)
         }
         return http.build()
+    }
+
+    @Bean
+    fun corsConfigurationSource(): CorsConfigurationSource {
+        val config = CorsConfiguration()
+        config.allowedOriginPatterns = listOf("*")
+        config.allowedMethods = listOf("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS")
+        config.allowedHeaders = listOf("*")
+        config.allowCredentials = true
+        config.maxAge = 3600L
+        return UrlBasedCorsConfigurationSource().also {
+            it.registerCorsConfiguration("/**", config)
+        }
     }
 
     @Bean
