@@ -55,6 +55,9 @@ Common
   - snapshot 패턴과 구분: 이쪽은 항상 현재 username 표시, 저쪽은 행위 시점 username 고정
 - Swagger 문서화 (springdoc-openapi, auth/jwt/opaque: webmvc, gateway: webflux)
 - Resilience4j 기반 timeout, retry, circuit breaker
+- CORS: 각 서비스(jwt-server, opaque-server, authorization-server) SecurityConfig에서 자체 처리
+  - allowedOriginPatterns: * / OPTIONS /** permitAll (preflight 차단 방지)
+  - gateway-server CORS 의존 제거 → Zero Trust 아키텍처 일관성 유지
 - Outbox Pattern (Kafka 메시지 유실 방지, Kafka-connect 연동)
 - Saga Pattern (분산 트랜잭션)
 - CQRS (읽기/쓰기 분리)
@@ -138,7 +141,13 @@ Redis 키 네임스페이스 (단일 Redis 인스턴스, prefix로 논리 분리
 - auth:mfa:pending:{username} → MFA setup 임시 secret (TTL 10분)
 - auth:qr:{token}             → QR 로그인 세션 (TTL 5분)
 - auth:reset:{token}          → 비밀번호 재설정 토큰 (TTL 30분)
-- jwt:authorities:{username}  → 유저 권한 목록 (TTL 24h) ← authorization-server write / gateway-server read
+- jwt:authorities:{username}  → 유저 권한 목록 (TTL 24h) ← authorization-server write / jwt-server·opaque-server read
+
+CORS
+- SecurityConfig에 CorsConfigurationSource 빈 등록 (두 필터 체인 모두 적용)
+- allowedOriginPatterns: * / allowedMethods: GET·POST·PUT·DELETE·PATCH·OPTIONS / allowedHeaders: *
+- allowCredentials: true (login form 세션 쿠키 지원)
+- defaultSecurityFilterChain: OPTIONS /** permitAll 추가 (Spring Security preflight 차단 방지)
 
 JWT 클레임 커스터마이징
 - OAuth2TokenCustomizerConfig: OAuth2TokenCustomizer<JwtEncodingContext> 빈 등록
@@ -204,6 +213,19 @@ jwt-server
 - 이미지 업로드 (MinIO 연동)
 - 알림 (Kafka 이벤트 발행)
 - 신고 기능
+
+Rate Limiting (Redis 토큰 버킷)
+- RedisRateLimiter: StringRedisTemplate + RedisScript<Long>으로 Lua 스크립트 원자적 실행
+  - bucket4j Maven Central 미제공 → 직접 구현 (HMGET·HMSET·EXPIRE)
+  - 키: rl:api:{principal} (인증된 경우 username, 미인증 시 IP)
+  - /api/**: burst=40, refill=20req/s
+- RateLimitInterceptor: preHandle에서 tryConsume() → false면 429 응답
+- WebMvcConfig: addInterceptors("/api/**")
+- 429 응답 형식: {"status":429,"error":"Too Many Requests","path":"..."}
+
+CORS
+- SecurityConfig: CorsConfigurationSource 빈 + OPTIONS /** permitAll
+- allowedOriginPatterns: * / allowedMethods: GET·POST·PUT·DELETE·PATCH·OPTIONS / allowedHeaders: *
 
 인증 방식 (Zero Trust — 각 서비스 자체 검증)
 - jwt-server가 JWT를 직접 검증 (oauth2ResourceServer + CustomJwtAuthenticationConverter)
@@ -301,7 +323,7 @@ Clean Architecture 구조
   - AuthenticatedUser(id: Long, username: String, roles: List<String>) : CallerPrincipal
   - AuthenticatedClient(clientId: String) : CallerPrincipal
   - CustomJwtAuthenticationConverter: JWT user_id 클레임 → AuthenticatedUser (Redis 권한 조회) / client_id 클레임 → AuthenticatedClient (ROLE_SYSTEM)
-- infrastructure/config: SecurityConfig (oauth2ResourceServer + CustomJwtAuthenticationConverter 등록), RedisConfig (Jackson 3.x), MinioConfig, SwaggerConfig, KafkaTopicConfig (notifications/reports/outbox.events, 파티션 3), KafkaProducerConfig (KafkaTemplate<String,String> 명시적 빈), KafkaConsumerConfig (@EnableKafka + ConcurrentKafkaListenerContainerFactory, StringDeserializer, auto-commit)
+- infrastructure/config: SecurityConfig (oauth2ResourceServer + CustomJwtAuthenticationConverter 등록, CORS, OPTIONS permitAll), RedisConfig (Jackson 3.x), MinioConfig, SwaggerConfig, KafkaTopicConfig (notifications/reports/outbox.events, 파티션 3), KafkaProducerConfig (KafkaTemplate<String,String> 명시적 빈), KafkaConsumerConfig (@EnableKafka + ConcurrentKafkaListenerContainerFactory, StringDeserializer, auto-commit), WebMvcConfig (RateLimitInterceptor → /api/**)
 - presentation:
   - PostController / CommentController: @AuthenticationPrincipal caller: CallerPrincipal, @PreAuthorize('USER','ADMIN','SYSTEM')
   - LikeController / FollowController / FeedController / ReportController: @AuthenticationPrincipal user: AuthenticatedUser? + null 가드 403, @PreAuthorize('USER','ADMIN','SYSTEM')
@@ -313,6 +335,18 @@ Clean Architecture 구조
 opaque-server
 - port 1030
 - OAuth 2.1 Resource Server (Opaque token introspection) — ROLE_ADMIN (관리) + ROLE_USER (결제) + ROLE_SYSTEM (시스템 클라이언트) 공용 서버
+
+Rate Limiting (Redis 토큰 버킷)
+- RedisRateLimiter: jwt-server와 동일 구현 (StringRedisTemplate + Lua 스크립트)
+  - /admin/**: rl:admin:{principal}, burst=20, refill=10req/s
+  - /payments/**: rl:payments:{principal}, burst=40, refill=20req/s
+  - else: 패스스루 (rate limiting 없음)
+- RateLimitInterceptor: requestURI prefix 분기
+- WebMvcConfig: addInterceptors("/admin/**", "/payments/**")
+
+CORS
+- SecurityConfig: CorsConfigurationSource 빈 + OPTIONS /** permitAll
+- allowedOriginPatterns: * (Bearer token 사용으로 allowCredentials 불필요)
 
 인증 방식
 - Opaque token → authorization-server /oauth2/introspect 호출
@@ -456,13 +490,14 @@ JWT 검증 (Zero Trust — 서명 검증만, 인가 없음)
 3. Spring Cloud Gateway 라우팅 + RequestRateLimiter
 4. LoggingFilter doFinally — 응답 상태·소요시간 로그
 
-Rate Limiting
-- Redis 기반 Token Bucket (RequestRateLimiter 필터)
-- KeyResolver: 인증된 요청 → principal.name (JWT sub), 미인증 요청 → IP 주소 (fallback)
+Rate Limiting (→ 각 서비스로 이관)
+- 기존: Redis 기반 Token Bucket (RequestRateLimiter 필터, gateway-server 담당)
+- 현재: jwt-server / opaque-server가 자체 HandlerInterceptor + Redis Lua 스크립트로 처리
+  - gateway-server 의존 없이 각 서비스가 독립적으로 제한 (Zero Trust 일관성)
 
-CORS
-- globalcors: allowed-origins/methods/headers = * (개발 환경)
-- DedupeResponseHeader 필터로 중복 CORS 헤더 제거
+CORS (→ 각 서비스로 이관)
+- 기존: globalcors + DedupeResponseHeader 필터 (gateway-server 담당)
+- 현재: jwt-server / opaque-server / authorization-server SecurityConfig에서 자체 처리
 
 Clean Architecture 구조
 - infrastructure/config: SecurityConfig (JWT 서명 검증), RateLimiterConfig, SwaggerConfig
@@ -482,6 +517,36 @@ eureka-server
 - self-preservation 비활성화
 - eviction-interval-timer-in-ms: 5000 (기본 60000 → 만료 인스턴스 빠른 제거)
 - response-cache-update-interval-ms: 3000 (기본 30000 → 레지스트리 캐시 갱신 주기)
+
+K8s 배포 (k8s/)
+Phase 1 (완료): Helm values — Bitnami PostgreSQL·Redis·Kafka·MinIO·ELK·Prometheus·Grafana·Zipkin
+Phase 2 (완료): 서비스 매니페스트 — Deployment·Service·ConfigMap·Secret·HPA·PodDisruptionBudget
+Phase 3 (완료): Istio + K8s Gateway API + cert-manager
+
+k8s/gateway/
+- gatewayclass.yaml: Istio GatewayClass (controllerName: istio.io/gateway-controller)
+- gateway.yaml: HTTP(80) + HTTPS(443) 리스너, cert-manager.io/cluster-issuer: letsencrypt-prod
+  - hostname: api.example.com (배포 전 실제 도메인으로 교체 필요)
+- httproutes.yaml: HTTP→HTTPS 301 리다이렉트 + 경로별 라우팅 (5초 타임아웃)
+  - /auth → authorization-server:80
+  - /api  → jwt-server:80
+  - /admin, /payments → opaque-server:80
+
+k8s/istio/
+- peer-authentication.yaml: mTLS PERMISSIVE (사이드카 전체 확인 후 STRICT로 전환)
+- destination-rules.yaml: 서비스별 outlierDetection (consecutiveGatewayErrors:5, interval:10s, baseEjectionTime:10s)
+  - Resilience4j Circuit Breaker를 Istio DestinationRule outlierDetection으로 대체
+
+k8s/cert-manager/
+- cluster-issuer.yaml: Let's Encrypt ACME prod, HTTP-01 solver (gatewayHTTPRoute)
+- certificate.yaml: secretName: msa-tls (배포 전 실제 도메인으로 교체 필요)
+
+k8s/helm/
+- reloader-values.yaml: Stakater Reloader (watchGlobally: false)
+  - Deployment annotation: secret.reloader.stakater.com/reload 으로 시크릿 변경 시 자동 롤링 재시작
+
+⚠️ 배포 전 교체 필요: api.example.com (도메인), user@example.com (cert-manager 이메일)
+⚠️ Git 커밋 금지: k8s/apps/*-secret.yaml (실제 값 채운 후 kubectl apply만)
 
 monitoring
 - Prometheus + Grafana (메트릭 수집 및 시각화)
