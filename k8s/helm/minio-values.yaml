@@ -1,0 +1,12 @@
+# helm install minio bitnami/minio -n msa -f k8s/infra/minio-values.yaml
+# 서비스 DNS: minio.msa.svc.cluster.local:9000
+mode: standalone
+
+auth:
+  rootUser: minioadmin
+  rootPassword: "CHANGE_ME"
+
+defaultBuckets: "jwt-server"
+
+persistence:
+  size: 5Gi

@@ -1,0 +1,23 @@
+# helm install kafka bitnami/kafka -n msa -f k8s/infra/kafka-values.yaml
+# 서비스 DNS: kafka.msa.svc.cluster.local:9092
+kraft:
+  enabled: true
+
+controller:
+  replicaCount: 1
+  persistence:
+    size: 2Gi
+
+broker:
+  replicaCount: 0  # controller가 broker 역할 겸임 (단일 노드)
+
+listeners:
+  client:
+    protocol: PLAINTEXT
+  controller:
+    protocol: PLAINTEXT
+
+# 기존 docker-compose KRaft 설정과 동일한 토픽 자동 생성
+extraConfig: |
+  auto.create.topics.enable=true
+  log.retention.hours=168

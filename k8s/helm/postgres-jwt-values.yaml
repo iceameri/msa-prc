@@ -1,0 +1,12 @@
+# helm install postgres-jwt bitnami/postgresql -n msa -f k8s/infra/postgres-jwt-values.yaml
+auth:
+  username: admin
+  password: "CHANGE_ME"
+  database: jwt_db
+
+primary:
+  persistence:
+    size: 2Gi
+
+readReplicas:
+  replicaCount: 0

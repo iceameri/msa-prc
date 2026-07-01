@@ -1,0 +1,18 @@
+# helm install elasticsearch bitnami/elasticsearch -n msa -f k8s/infra/elasticsearch-values.yaml
+# 서비스 DNS: elasticsearch.msa.svc.cluster.local:9200
+master:
+  replicaCount: 1
+  persistence:
+    size: 2Gi
+
+data:
+  replicaCount: 0  # master가 data 역할 겸임 (단일 노드)
+
+coordinating:
+  replicaCount: 0
+
+ingest:
+  replicaCount: 0
+
+security:
+  enabled: false  # xpack security 비활성화 (기존 docker-compose와 동일)

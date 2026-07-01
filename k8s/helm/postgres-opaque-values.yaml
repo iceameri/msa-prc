@@ -1,0 +1,12 @@
+# helm install postgres-opaque bitnami/postgresql -n msa -f k8s/infra/postgres-opaque-values.yaml
+auth:
+  username: admin
+  password: "CHANGE_ME"
+  database: opaque_db
+
+primary:
+  persistence:
+    size: 2Gi
+
+readReplicas:
+  replicaCount: 0

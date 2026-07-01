@@ -1,0 +1,12 @@
+# helm install redis bitnami/redis -n msa -f k8s/infra/redis-values.yaml
+# 서비스 DNS: redis-master.msa.svc.cluster.local
+# application-k8s.yaml의 spring.data.redis.host: redis-master
+auth:
+  enabled: false  # 운영 환경에서는 true로 변경 후 password 설정
+
+master:
+  persistence:
+    size: 1Gi
+
+replica:
+  replicaCount: 0
