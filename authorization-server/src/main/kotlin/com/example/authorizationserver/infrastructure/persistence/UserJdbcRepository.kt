@@ -3,6 +3,7 @@ package com.example.authorizationserver.infrastructure.persistence
 import com.example.authorizationserver.domain.user.User
 import com.example.authorizationserver.domain.user.UserRepository
 import com.example.authorizationserver.infrastructure.kafka.UserSyncEventPublisher
+import org.slf4j.LoggerFactory
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.jdbc.core.ResultSetExtractor
 import org.springframework.jdbc.core.queryForObject
@@ -16,6 +17,8 @@ class UserJdbcRepository(
     private val jdbcTemplate: JdbcTemplate,
     private val userSyncEventPublisher: UserSyncEventPublisher
 ) : UserRepository {
+
+    private val log = LoggerFactory.getLogger(javaClass)
 
     private val userExtractor = ResultSetExtractor { rs ->
         var user: User? = null
@@ -94,7 +97,7 @@ class UserJdbcRepository(
             )!!
             val saved = user.copy(id = userId)
             syncAuthorities(userId, user.authorities)
-            userSyncEventPublisher.publish(userId, user.username, version = 1L)
+            userSyncEventPublisher.publish(userId, user.username, user.enabled, user.status, version = 1L)
             saved
         } else {
             val newVersion = jdbcTemplate.queryForObject<Long>(
@@ -111,7 +114,7 @@ class UserJdbcRepository(
                 user.id
             )!!
             syncAuthorities(user.id, user.authorities)
-            userSyncEventPublisher.publish(user.id, user.username, newVersion)
+            userSyncEventPublisher.publish(user.id, user.username, user.enabled, user.status, newVersion)
             user
         }
     }
@@ -149,48 +152,23 @@ class UserJdbcRepository(
         )
     }
 
-    override fun setEnabled(username: String, enabled: Boolean) {
-        jdbcTemplate.update(
-            """
-            UPDATE  authorization_db.public.users
-            SET     enabled = ?
-            WHERE   username = ?
-            """.trimIndent(),
-            enabled, username
-        )
-    }
-
-    override fun setEnabledById(userId: Long, enabled: Boolean) {
-        jdbcTemplate.update(
-            """
-            UPDATE  authorization_db.public.users
-            SET     enabled = ?
-            WHERE   user_id = ?
-            """.trimIndent(),
-            enabled, userId
-        )
-    }
-
-    override fun updateStatusById(userId: Long, status: String) {
-        jdbcTemplate.update(
-            """
-            UPDATE  authorization_db.public.users
-            SET     status = ?
-            WHERE   user_id = ?
-            """.trimIndent(),
-            status, userId
-        )
-    }
-
     override fun setStatusAndEnabled(userId: Long, enabled: Boolean, status: String) {
-        jdbcTemplate.update(
+        val matched = jdbcTemplate.query(
             """
             UPDATE  authorization_db.public.users
-            SET     enabled = ?, status = ?
+            SET     enabled = ?, status = ?, version = version + 1
             WHERE   user_id = ?
+            RETURNING username, version
             """.trimIndent(),
+            { rs, _ -> Pair(rs.getString("username"), rs.getLong("version")) },
             enabled, status, userId
-        )
+        ).firstOrNull()
+        if (matched == null) {
+            log.warn("setStatusAndEnabled: no user found for userId={}, skipping Kafka publish", userId)
+            return
+        }
+        val (username, version) = matched
+        userSyncEventPublisher.publish(userId, username, enabled, status, version)
     }
 
     override fun updateUsername(userId: Long, newUsername: String) {
