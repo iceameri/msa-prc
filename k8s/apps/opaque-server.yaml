@@ -3,6 +3,8 @@ kind: Deployment
 metadata:
   name: opaque-server
   namespace: msa
+  annotations:
+    secret.reloader.stakater.com/reload: "opaque-server-secret"
 spec:
   replicas: 1
   selector:

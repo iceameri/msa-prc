@@ -1,0 +1,28 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: msa-gateway
+  namespace: msa
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  gatewayClassName: istio
+  listeners:
+    - name: http
+      hostname: "api.example.com"  # ← 실제 도메인으로 교체
+      port: 80
+      protocol: HTTP
+      allowedRoutes:
+        namespaces:
+          from: Same
+    - name: https
+      hostname: "api.example.com"  # ← 실제 도메인으로 교체
+      port: 443
+      protocol: HTTPS
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: msa-tls
+      allowedRoutes:
+        namespaces:
+          from: Same

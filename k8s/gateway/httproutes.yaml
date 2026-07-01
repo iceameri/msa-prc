@@ -1,0 +1,114 @@
+---
+# HTTP → HTTPS 리다이렉트
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: http-redirect
+  namespace: msa
+spec:
+  parentRefs:
+    - name: msa-gateway
+      sectionName: http
+  hostnames:
+    - "api.example.com"  # ← 실제 도메인으로 교체
+  rules:
+    - filters:
+        - type: RequestRedirect
+          requestRedirect:
+            scheme: https
+            statusCode: 301
+---
+# /auth/** → authorization-server
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: auth-route
+  namespace: msa
+spec:
+  parentRefs:
+    - name: msa-gateway
+      sectionName: https
+  hostnames:
+    - "api.example.com"  # ← 실제 도메인으로 교체
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /auth
+      backendRefs:
+        - name: authorization-server
+          port: 80
+      timeouts:
+        request: 5s
+---
+# /api/** → jwt-server
+# 레이트 리미팅: 각 서비스 내 bucket4j + Redis로 처리 (20 req/s)
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: api-route
+  namespace: msa
+spec:
+  parentRefs:
+    - name: msa-gateway
+      sectionName: https
+  hostnames:
+    - "api.example.com"  # ← 실제 도메인으로 교체
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /api
+      backendRefs:
+        - name: jwt-server
+          port: 80
+      timeouts:
+        request: 5s
+---
+# /admin/** → opaque-server
+# 레이트 리미팅: 각 서비스 내 bucket4j + Redis로 처리 (10 req/s)
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: admin-route
+  namespace: msa
+spec:
+  parentRefs:
+    - name: msa-gateway
+      sectionName: https
+  hostnames:
+    - "api.example.com"  # ← 실제 도메인으로 교체
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /admin
+      backendRefs:
+        - name: opaque-server
+          port: 80
+      timeouts:
+        request: 5s
+---
+# /payments/** → opaque-server
+# 레이트 리미팅: 각 서비스 내 bucket4j + Redis로 처리 (20 req/s)
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: payments-route
+  namespace: msa
+spec:
+  parentRefs:
+    - name: msa-gateway
+      sectionName: https
+  hostnames:
+    - "api.example.com"  # ← 실제 도메인으로 교체
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /payments
+      backendRefs:
+        - name: opaque-server
+          port: 80
+      timeouts:
+        request: 5s

@@ -1,0 +1,59 @@
+---
+# Resilience4j 회로 차단기 → Istio outlierDetection으로 대체
+# 원본 설정: slidingWindowSize=10, failureRateThreshold=50%, waitDuration=10s, timeout=5s
+apiVersion: networking.istio.io/v1
+kind: DestinationRule
+metadata:
+  name: authorization-server
+  namespace: msa
+spec:
+  host: authorization-server.msa.svc.cluster.local
+  trafficPolicy:
+    connectionPool:
+      http:
+        http1MaxPendingRequests: 1000
+        http2MaxRequests: 1000
+    outlierDetection:
+      consecutiveGatewayErrors: 5
+      consecutive5xxErrors: 5
+      interval: 10s         # 평가 주기
+      baseEjectionTime: 10s # 회로 열림 유지 시간 (waitDurationInOpenState)
+      maxEjectionPercent: 100
+---
+apiVersion: networking.istio.io/v1
+kind: DestinationRule
+metadata:
+  name: jwt-server
+  namespace: msa
+spec:
+  host: jwt-server.msa.svc.cluster.local
+  trafficPolicy:
+    connectionPool:
+      http:
+        http1MaxPendingRequests: 1000
+        http2MaxRequests: 1000
+    outlierDetection:
+      consecutiveGatewayErrors: 5
+      consecutive5xxErrors: 5
+      interval: 10s
+      baseEjectionTime: 10s
+      maxEjectionPercent: 100
+---
+apiVersion: networking.istio.io/v1
+kind: DestinationRule
+metadata:
+  name: opaque-server
+  namespace: msa
+spec:
+  host: opaque-server.msa.svc.cluster.local
+  trafficPolicy:
+    connectionPool:
+      http:
+        http1MaxPendingRequests: 1000
+        http2MaxRequests: 1000
+    outlierDetection:
+      consecutiveGatewayErrors: 5
+      consecutive5xxErrors: 5
+      interval: 10s
+      baseEjectionTime: 10s
+      maxEjectionPercent: 100

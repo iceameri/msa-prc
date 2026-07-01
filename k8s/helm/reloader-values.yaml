@@ -1,0 +1,5 @@
+# Stakater Reloader — Secret/ConfigMap 변경 시 Deployment 자동 롤링 업데이트
+# helm repo add stakater https://stakater.github.io/stakater-charts
+# helm install reloader stakater/reloader -f k8s/helm/reloader-values.yaml -n msa
+reloader:
+  watchGlobally: false

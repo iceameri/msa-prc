@@ -1,0 +1,10 @@
+apiVersion: security.istio.io/v1
+kind: PeerAuthentication
+metadata:
+  name: msa-peer-auth
+  namespace: msa
+spec:
+  mtls:
+    # PERMISSIVE: mTLS + 평문 모두 허용 (마이그레이션 초기 단계)
+    # 모든 서비스가 sidecar 주입 및 동작 확인 후 STRICT으로 전환
+    mode: PERMISSIVE
