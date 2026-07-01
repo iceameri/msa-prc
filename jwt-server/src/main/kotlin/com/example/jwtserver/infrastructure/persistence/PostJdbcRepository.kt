@@ -16,7 +16,7 @@ class PostJdbcRepository(private val jdbcTemplate: JdbcTemplate) : PostRepositor
         SELECT    p.*,
                   COALESCE(u.username, sc.display_name) AS author_username
         FROM      jwt_db.public.posts p
-        LEFT JOIN jwt_db.public.authorization_users u ON p.author_id = u.id
+        LEFT JOIN jwt_db.public.authorization_users u ON p.author_id = u.user_id
         LEFT JOIN jwt_db.public.authorization_system_clients sc ON p.client_id = sc.client_id"""
 
     override fun findById(id: Long): Post? =

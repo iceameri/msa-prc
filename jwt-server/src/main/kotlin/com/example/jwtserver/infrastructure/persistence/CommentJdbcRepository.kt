@@ -15,7 +15,7 @@ class CommentJdbcRepository(private val jdbcTemplate: JdbcTemplate) : CommentRep
         SELECT    c.*,
                   COALESCE(u.username, sc.display_name) AS author_username
         FROM      jwt_db.public.comments c
-        LEFT JOIN jwt_db.public.authorization_users u ON c.author_id = u.id
+        LEFT JOIN jwt_db.public.authorization_users u ON c.author_id = u.user_id
         LEFT JOIN jwt_db.public.authorization_system_clients sc ON c.client_id = sc.client_id"""
 
     override fun findById(id: Long): Comment? =
