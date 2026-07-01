@@ -49,7 +49,7 @@ Kafka (KRaft 모드)
   - jwt-server: notifications, reports, outbox.events (파티션 3)
   - opaque-server: payment.saga, user-management, report-actions, user-active (파티션 3)
   - authorization-server: user-sync, user.username.updated (파티션 3)
-  - springCloudBus: Spring Cloud Bus 자동 생성
+  - ~~springCloudBus: Spring Cloud Bus 자동 생성~~
 
 Common
 - dto는 Kotlin data class 사용 (Java record 대체)
@@ -72,7 +72,7 @@ Common
   - posts/comments: author_id만 저장, 조회 시 authorization_users LEFT JOIN으로 현재 username 획득
   - username 변경 시 authorization_users 단 1행 UPDATE → 모든 JOIN이 자동 반영
   - snapshot 패턴과 구분: 이쪽은 항상 현재 username 표시, 저쪽은 행위 시점 username 고정
-- Swagger 문서화 (springdoc-openapi, auth/jwt/opaque: webmvc, gateway: webflux)
+- Swagger 문서화 (springdoc-openapi, auth/jwt/opaque: webmvc, ~~gateway: webflux~~)
 - Resilience4j 기반 timeout, retry, circuit breaker
 - CORS: 각 서비스(jwt-server, opaque-server, authorization-server) SecurityConfig에서 자체 처리
   - allowedOriginPatterns: * / OPTIONS /** permitAll (preflight 차단 방지)
@@ -81,22 +81,22 @@ Common
 - Saga Pattern (분산 트랜잭션)
 - CQRS (읽기/쓰기 분리)
 - 배포 후 재기동 시 알림 제외
-  - eureka initial-status: STARTING (헬스체크 통과 전 트래픽 차단)
+  - ~~eureka initial-status: STARTING (헬스체크 통과 전 트래픽 차단)~~
   - Kafka consumer auto-offset-reset: latest (재기동 후 이전 메시지 재처리 방지)
-- Eureka 클라이언트 공통 설정 (config/gateway/authorization/jwt/opaque)
-  - instance-id: ${spring.application.name}:${server.port} (멀티 인스턴스 구분)
-  - lease-renewal-interval-in-seconds: 10 (기본 30 → 하트비트 주기)
-  - lease-expiration-duration-in-seconds: 30 (기본 90 → DOWN 판정 시간)
-  - registry-fetch-interval-seconds: 5 (기본 30 → 레지스트리 갱신 주기)
-  - health-check-url-path: /actuator/health
-  - status-page-url-path: /actuator/info
+- ~~Eureka 클라이언트 공통 설정 (config/gateway/authorization/jwt/opaque)~~
+  - ~~instance-id: ${spring.application.name}:${server.port} (멀티 인스턴스 구분)~~
+  - ~~lease-renewal-interval-in-seconds: 10 (기본 30 → 하트비트 주기)~~
+  - ~~lease-expiration-duration-in-seconds: 30 (기본 90 → DOWN 판정 시간)~~
+  - ~~registry-fetch-interval-seconds: 5 (기본 30 → 레지스트리 갱신 주기)~~
+  - ~~health-check-url-path: /actuator/health~~
+  - ~~status-page-url-path: /actuator/info~~
 - Prometheus 메트릭 수집 (micrometer-registry-prometheus, /actuator/prometheus)
 - Logstash 로그 연동 (logback-spring.xml, LogstashTcpSocketAppender)
   - dev: DEBUG / prod: INFO
   - 서비스명(service 필드)으로 Kibana 필터링
   - Logstash 주소 외부화: logging.logstash.host / logging.logstash.port (springProperty)
     - 로컬: defaultValue="localhost:5000"
-    - Docker/prod: config-server application.yaml → logstash:5000
+    - ~~Docker/prod: config-server application.yaml → logstash:5000~~
   - reconnectionDelay: 10s, connectionTimeout: 5000ms (Logstash down 시 무한 블로킹 방지)
 
 
@@ -128,9 +128,10 @@ authorization-server
 권한(Authorities) 설계
 - JWT payload에 authorities 미포함 (노출 방지)
 - 로그인 성공 시 authorities → Redis 저장 (key: jwt:authorities:{username}, TTL: 24h)
-- gateway에서 요청마다 Redis 조회 → X-User-Authorities 헤더로 하위 서비스에 전달
-- 하위 서비스(jwt-server)는 헤더를 신뢰하여 SecurityContext 구성 (Redis 직접 접근 없음)
-- Redis miss 시 빈 권한으로 헤더 전달 → 하위 서비스에서 403 → 클라이언트 재로그인 유도
+- ~~gateway에서 요청마다 Redis 조회 → X-User-Authorities 헤더로 하위 서비스에 전달~~
+- ~~하위 서비스(jwt-server)는 헤더를 신뢰하여 SecurityContext 구성 (Redis 직접 접근 없음)~~
+- ~~Redis miss 시 빈 권한으로 헤더 전달 → 하위 서비스에서 403 → 클라이언트 재로그인 유도~~
+- 현재: jwt-server/opaque-server가 Redis jwt:authorities:{username} 직접 조회 (Zero Trust)
 
 MFA / TOTP (Google Authenticator)
 - setup: secret 생성 → Redis 임시 저장(auth:mfa:pending:{username}, TTL 10분) → QR base64 반환
@@ -254,7 +255,7 @@ CORS
 
 인증 방식 (Zero Trust — 각 서비스 자체 검증)
 - jwt-server가 JWT를 직접 검증 (oauth2ResourceServer + CustomJwtAuthenticationConverter)
-  - gateway는 JWT 서명 검증만 수행 (rate limiting 목적), 헤더 주입 없음
+  - ~~gateway는 JWT 서명 검증만 수행 (rate limiting 목적), 헤더 주입 없음~~
   - X-User-* / X-Client-Id 헤더에 의존하지 않음 → gateway를 우회해도 동일한 인증 보장
 - CustomJwtAuthenticationConverter: JWT 클레임으로 principal 직접 구성
   - user_id 클레임 있음 → 유저 토큰: sub(username)으로 Redis jwt:authorities:{username} 조회 → AuthenticatedUser(id, username, roles) → SecurityContext
@@ -496,56 +497,56 @@ Clean Architecture 구조
   - StatisticsController (@PreAuthorize ADMIN+SYSTEM)
   - GlobalExceptionHandler
     
-gateway-server
-- port 1100
-- WebFlux (Spring Cloud Gateway) 기반
+~~gateway-server~~ (Deprecated — K8s Gateway API + Istio로 대체)
+- ~~port 1100~~
+- ~~WebFlux (Spring Cloud Gateway) 기반~~
 
-JWT 검증 (Zero Trust — 서명 검증만, 인가 없음)
-- authorization-server JWK Set으로 JWT 서명 검증 (issuer-uri / jwk-set-uri → localhost:1010)
-- 헤더 주입 없음 — Authorization 헤더를 그대로 downstream 전달
-- 인가 결정은 각 서비스(jwt-server, opaque-server)가 독립적으로 수행
-- Redis 의존성 없음 (rate limiting은 Spring Cloud Gateway 내장 Redis 연동)
-- authorization-server는 gateway를 거치지 않음 (OAuth2 브라우저 리다이렉트 특성상 직접 접근)
+~~JWT 검증 (Zero Trust — 서명 검증만, 인가 없음)~~
+- ~~authorization-server JWK Set으로 JWT 서명 검증 (issuer-uri / jwk-set-uri → localhost:1010)~~
+- ~~헤더 주입 없음 — Authorization 헤더를 그대로 downstream 전달~~
+- ~~인가 결정은 각 서비스(jwt-server, opaque-server)가 독립적으로 수행~~
+- ~~Redis 의존성 없음 (rate limiting은 Spring Cloud Gateway 내장 Redis 연동)~~
+- ~~authorization-server는 gateway를 거치지 않음 (OAuth2 브라우저 리다이렉트 특성상 직접 접근)~~
 
-라우팅
-- /auth/**      → authorization-server (permitAll, JWT 불필요)
-- /api/**       → jwt-server     (authenticated, rate limit 20req/s burst 40)
-- /admin/**     → opaque-server  (authenticated, rate limit 10req/s burst 20)
-- /payments/**  → opaque-server  (authenticated, rate limit 20req/s burst 40)
+~~라우팅~~
+- ~~/auth/**      → authorization-server (permitAll, JWT 불필요)~~
+- ~~/api/**       → jwt-server     (authenticated, rate limit 20req/s burst 40)~~
+- ~~/admin/**     → opaque-server  (authenticated, rate limit 10req/s burst 20)~~
+- ~~/payments/**  → opaque-server  (authenticated, rate limit 20req/s burst 40)~~
 
-필터 실행 순서
-1. LoggingFilter (order=HIGHEST_PRECEDENCE) — 요청 수신 로그
-2. Spring Security WebFilter — JWT 서명 검증 / permitAll 경로 통과
-3. Spring Cloud Gateway 라우팅 + RequestRateLimiter
-4. LoggingFilter doFinally — 응답 상태·소요시간 로그
+~~필터 실행 순서~~
+~~1. LoggingFilter (order=HIGHEST_PRECEDENCE) — 요청 수신 로그~~
+~~2. Spring Security WebFilter — JWT 서명 검증 / permitAll 경로 통과~~
+~~3. Spring Cloud Gateway 라우팅 + RequestRateLimiter~~
+~~4. LoggingFilter doFinally — 응답 상태·소요시간 로그~~
 
 Rate Limiting (→ 각 서비스로 이관)
-- 기존: Redis 기반 Token Bucket (RequestRateLimiter 필터, gateway-server 담당)
+- ~~기존: Redis 기반 Token Bucket (RequestRateLimiter 필터, gateway-server 담당)~~
 - 현재: jwt-server / opaque-server가 자체 HandlerInterceptor + Redis Lua 스크립트로 처리
   - gateway-server 의존 없이 각 서비스가 독립적으로 제한 (Zero Trust 일관성)
 
 CORS (→ 각 서비스로 이관)
-- 기존: globalcors + DedupeResponseHeader 필터 (gateway-server 담당)
+- ~~기존: globalcors + DedupeResponseHeader 필터 (gateway-server 담당)~~
 - 현재: jwt-server / opaque-server / authorization-server SecurityConfig에서 자체 처리
 
-Clean Architecture 구조
-- infrastructure/config: SecurityConfig (JWT 서명 검증), RateLimiterConfig, SwaggerConfig
-- infrastructure/filter: LoggingFilter (GlobalFilter)
+~~Clean Architecture 구조~~
+- ~~infrastructure/config: SecurityConfig (JWT 서명 검증), RateLimiterConfig, SwaggerConfig~~
+- ~~infrastructure/filter: LoggingFilter (GlobalFilter)~~
 
-config-server
-- port 1110
-- native profile (classpath:/config)
-- 환경별 프로파일 (dev / prod)
-- 암호화된 설정값 관리 ('{cipher}' prefix, encrypt.key)
-- Spring Cloud Bus + Kafka로 설정 변경 자동 반영
-- 서버별 설정 파일 구조: {service}.yaml / {service}-dev.yaml / {service}-prod.yaml
+~~config-server~~ (Deprecated — K8s ConfigMap/Secret으로 대체)
+- ~~port 1110~~
+- ~~native profile (classpath:/config)~~
+- ~~환경별 프로파일 (dev / prod)~~
+- ~~암호화된 설정값 관리 ('{cipher}' prefix, encrypt.key)~~
+- ~~Spring Cloud Bus + Kafka로 설정 변경 자동 반영~~
+- ~~서버별 설정 파일 구조: {service}.yaml / {service}-dev.yaml / {service}-prod.yaml~~
 
-eureka-server
-- port 1120
-- Spring Security 기본 인증 (admin/admin)
-- self-preservation 비활성화
-- eviction-interval-timer-in-ms: 5000 (기본 60000 → 만료 인스턴스 빠른 제거)
-- response-cache-update-interval-ms: 3000 (기본 30000 → 레지스트리 캐시 갱신 주기)
+~~eureka-server~~ (Deprecated — K8s Service DNS로 대체)
+- ~~port 1120~~
+- ~~Spring Security 기본 인증 (admin/admin)~~
+- ~~self-preservation 비활성화~~
+- ~~eviction-interval-timer-in-ms: 5000 (기본 60000 → 만료 인스턴스 빠른 제거)~~
+- ~~response-cache-update-interval-ms: 3000 (기본 30000 → 레지스트리 캐시 갱신 주기)~~
 
 K8s 배포 (k8s/)
 Phase 1 (완료): Helm values — Bitnami PostgreSQL·Redis·Kafka·MinIO·ELK·Prometheus·Grafana·Zipkin
