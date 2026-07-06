@@ -253,17 +253,21 @@ CORS
 - SecurityConfig: CorsConfigurationSource 빈 + OPTIONS /** permitAll
 - allowedOriginPatterns: * / allowedMethods: GET·POST·PUT·DELETE·PATCH·OPTIONS / allowedHeaders: *
 
-인증 방식 (Zero Trust — 각 서비스 자체 검증)
-- jwt-server가 JWT를 직접 검증 (oauth2ResourceServer + CustomJwtAuthenticationConverter)
-  - ~~gateway는 JWT 서명 검증만 수행 (rate limiting 목적), 헤더 주입 없음~~
-  - X-User-* / X-Client-Id 헤더에 의존하지 않음 → gateway를 우회해도 동일한 인증 보장
-- CustomJwtAuthenticationConverter: JWT 클레임으로 principal 직접 구성
+인증 방식 (Zero Trust — Istio 서비스 메시 위임)
+- JWT 서명 검증: Istio sidecar의 RequestAuthentication이 처리 (authorization-server JWKs 조회)
+  - 앱 레벨 서명 검증 제거 → spring-boot-starter-oauth2-resource-server 의존성 제거
+  - Istio가 거부한 요청은 앱까지 도달하지 않음 (K8s 환경)
+  - 로컬(Istio 없음): 서명 검증 없이 JWT payload Base64 파싱만 수행 (개발 편의)
+- JwtClaimsFilter (OncePerRequestFilter): Istio 검증 통과 후 Authorization 헤더에서 클레임 파싱
   - user_id 클레임 있음 → 유저 토큰: sub(username)으로 Redis jwt:authorities:{username} 조회 → AuthenticatedUser(id, username, roles) → SecurityContext
-  - client_id 클레임 있음 (또는 user_id 없음) → 시스템 토큰: AuthenticatedClient(clientId) → SecurityContext (ROLE_SYSTEM)
+  - user_id 없음 → 시스템 토큰: AuthenticatedClient(clientId) → SecurityContext (ROLE_SYSTEM)
   - Redis miss → 빈 roles → @PreAuthorize에서 403 (fail-open, 재로그인 유도)
+  - 파싱 실패 → SecurityContext 미설정 → anyRequest().authenticated() → 401
+- SecurityConfig: authenticationEntryPoint 추가 (미인증 시 401, 기존 403 방지)
 - CallerPrincipal 인터페이스: AuthenticatedUser / AuthenticatedClient 공통 타입
   - PostController/CommentController: @AuthenticationPrincipal caller: CallerPrincipal 사용 (USER/ADMIN/SYSTEM 모두 허용)
   - LikeController/FollowController/FeedController/ReportController: @AuthenticationPrincipal user: AuthenticatedUser? + null 가드 (SYSTEM 인증 통과 후 사용자 컨텍스트 필요 시 403)
+- 역할(Role) 기반 인가: 앱 레벨 @PreAuthorize 유지 (roles는 Redis에 있어 Istio에서 처리 불가)
 
 authorization_system_clients (Local Read-Model for machine clients)
 - Source of truth: authorization_db.authorization_system_clients (authorization-server 관리)
@@ -350,8 +354,8 @@ Clean Architecture 구조
   - CallerPrincipal (interface) — AuthenticatedUser / AuthenticatedClient 공통 타입
   - AuthenticatedUser(id: Long, username: String, roles: List<String>) : CallerPrincipal
   - AuthenticatedClient(clientId: String) : CallerPrincipal
-  - CustomJwtAuthenticationConverter: JWT user_id 클레임 → AuthenticatedUser (Redis 권한 조회) / client_id 클레임 → AuthenticatedClient (ROLE_SYSTEM)
-- infrastructure/config: SecurityConfig (oauth2ResourceServer + CustomJwtAuthenticationConverter 등록, CORS, OPTIONS permitAll), RedisConfig (Jackson 3.x), MinioConfig, SwaggerConfig, KafkaTopicConfig (notifications/reports/outbox.events, 파티션 3), KafkaProducerConfig (KafkaTemplate<String,String> 명시적 빈), KafkaConsumerConfig (@EnableKafka + ConcurrentKafkaListenerContainerFactory, StringDeserializer, auto-commit), WebMvcConfig (RateLimitInterceptor → /api/**)
+  - JwtClaimsFilter (OncePerRequestFilter): Authorization 헤더 → Base64 JWT payload 파싱 → SecurityContext 구성 (서명 재검증 없음, Istio 위임)
+- infrastructure/config: SecurityConfig (JwtClaimsFilter 주입, authenticationEntryPoint 401, CORS, OPTIONS permitAll), RedisConfig (Jackson 3.x), MinioConfig, SwaggerConfig, KafkaTopicConfig (notifications/reports/outbox.events, 파티션 3), KafkaProducerConfig (KafkaTemplate<String,String> 명시적 빈), KafkaConsumerConfig (@EnableKafka + ConcurrentKafkaListenerContainerFactory, StringDeserializer, auto-commit), WebMvcConfig (RateLimitInterceptor → /api/**)
 - presentation:
   - PostController / CommentController: @AuthenticationPrincipal caller: CallerPrincipal, @PreAuthorize('USER','ADMIN','SYSTEM')
   - LikeController / FollowController / FeedController / ReportController: @AuthenticationPrincipal user: AuthenticatedUser? + null 가드 403, @PreAuthorize('USER','ADMIN','SYSTEM')
@@ -563,9 +567,17 @@ k8s/gateway/
   - /admin, /payments → opaque-server:80
 
 k8s/istio/
-- peer-authentication.yaml: mTLS PERMISSIVE (사이드카 전체 확인 후 STRICT로 전환)
+- peer-authentication.yaml: mTLS STRICT (평문 접근 차단, 사이드카 없는 호출자 거부)
 - destination-rules.yaml: 서비스별 outlierDetection (consecutiveGatewayErrors:5, interval:10s, baseEjectionTime:10s)
   - Resilience4j Circuit Breaker를 Istio DestinationRule outlierDetection으로 대체
+- request-authentication.yaml: jwt-server 대상 JWT 검증 위임
+  - issuer: AUTH_ISSUER_URI 실제 외부 공개 도메인 (배포 전 교체 필요)
+  - jwksUri: http://authorization-server.msa.svc.cluster.local:1010/oauth2/jwks (클러스터 내부 조회)
+  - forwardOriginalToken: true (앱까지 Authorization 헤더 전달, JwtClaimsFilter 파싱에 필요)
+- authorization-policy.yaml: jwt-server 인가 정책
+  - jwt-server-allow-public: /actuator/health, /v3/api-docs/**, /swagger-ui/**, OPTIONS → 인증 없이 허용
+  - jwt-server-require-jwt: requestPrincipals: ["*"] → 유효한 JWT 있는 요청만 허용
+  - opaque-server: 앱 레벨 introspection 유지 (Istio 위임 없음)
 
 k8s/cert-manager/
 - cluster-issuer.yaml: Let's Encrypt ACME prod, HTTP-01 solver (gatewayHTTPRoute)
@@ -575,7 +587,7 @@ k8s/helm/
 - reloader-values.yaml: Stakater Reloader (watchGlobally: false)
   - Deployment annotation: secret.reloader.stakater.com/reload 으로 시크릿 변경 시 자동 롤링 재시작
 
-⚠️ 배포 전 교체 필요: api.example.com (도메인), user@example.com (cert-manager 이메일)
+⚠️ 배포 전 교체 필요: api.example.com (도메인), user@example.com (cert-manager 이메일), auth.example.com (request-authentication.yaml issuer — AUTH_ISSUER_URI 실제 값)
 ⚠️ Git 커밋 금지: k8s/apps/*-secret.yaml (실제 값 채운 후 kubectl apply만)
 
 monitoring
