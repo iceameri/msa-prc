@@ -120,8 +120,9 @@ authorization-server
 - 동시 로그인 세션 제한 (jwt: 무제한, opaque: 5개)
 - Token revocation endpoint
 - 비밀번호 재설정 플로우
-- 로그아웃 (POST /api/logout)
+- 로그아웃 (POST /api/logout) — SLO (Single Logout)
   - RedisLogoutHandler: jwt:authorities:{username} + auth:user:{username} Redis 삭제
+  - TokenRevocationService.revokeAllForPrincipal(): oauth2_authorization 테이블 Refresh Token 폐기 (재발급 차단)
   - HTTP 세션 무효화 + SecurityContext 클리어
   - 성공 시 /login?logout 리다이렉트
 
@@ -173,11 +174,10 @@ CORS
 - defaultSecurityFilterChain: OPTIONS /** permitAll 추가 (Spring Security preflight 차단 방지)
 
 JWT 클레임 커스터마이징
-- OAuth2TokenCustomizerConfig: OAuth2TokenCustomizer<JwtEncodingContext> 빈 등록
-  - 유저 토큰 발급 시 username으로 DB/캐시에서 userId 조회
-  - JWT sub = username (기본값 유지 — Redis jwt:authorities:{username} 키와 정확히 일치)
-  - JWT user_id 클레임 추가 (userId.toString()) — 하위 서비스의 숫자 ID 참조용
-  - client_credentials 그랜트: user_id/username 대신 client_id 클레임 추가 (RegisteredClient.clientId 값)
+- OAuth2TokenCustomizerConfig: OAuth2TokenCustomizer<JwtEncodingContext> 빈 등록 (토큰 타입별 분기)
+  - access_token (유저): user_id=userId.toString(), username 클레임 추가 (jwt-server JwtClaimsFilter용)
+  - id_token (OIDC): sub=userId.toString() (안정적 식별자), preferred_username=username (OIDC 표준 클레임)
+  - client_credentials: client_id 클레임 추가, user_id/username 없음
 - OAuth2TokenCustomizerConfig: OAuth2TokenCustomizer<OAuth2TokenClaimsContext> 빈 등록 (opaque token 전용)
   - 유저 토큰: sub = userId.toString() (opaque introspector가 toLongOrNull()로 유저 감지), username 클레임 추가
   - client_credentials: 아무것도 추가하지 않음 → sub = client_id (Spring 기본값, 비숫자)
@@ -394,6 +394,8 @@ CORS
   - 유저 토큰: sub = userId.toString() (introspector의 toLongOrNull() 기준), username 클레임 추가
   - client_credentials: customizer 미적용 → sub = client_id (Spring 기본값, 비숫자 문자열)
 - Spring Security 7 OpaqueTokenIntrospector 구현체로 등록 (RestClient 직접 호출)
+- application-k8s.yaml introspection 설정: introspection-uri / client-id: opaque-server-client / client-secret: ${OPAQUE_CLIENT_SECRET}
+  - client-id 누락 시 authorization-server introspect 엔드포인트 인증 실패 → 모든 토큰 검증 불가
 - SecurityConfig 경로별 권한:
   - /admin/** → hasAnyRole("ADMIN", "SYSTEM")
   - /payments/** → hasAnyRole("USER", "ADMIN")

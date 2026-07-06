@@ -6,6 +6,7 @@ import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.security.core.Authentication
 import org.springframework.security.oauth2.core.AuthorizationGrantType
+import org.springframework.security.oauth2.core.oidc.endpoint.OidcParameterNames
 import org.springframework.security.oauth2.server.authorization.token.JwtEncodingContext
 import org.springframework.security.oauth2.server.authorization.token.OAuth2TokenClaimsContext
 import org.springframework.security.oauth2.server.authorization.token.OAuth2TokenCustomizer
@@ -27,8 +28,15 @@ class OAuth2TokenCustomizerConfig(
             val user = userCachePort.getUser(username)
                 ?: userRepository.findByUsername(username)
                 ?: return@OAuth2TokenCustomizer
-            context.claims.claim("user_id", user.id?.toString() ?: "")
-            context.claims.claim("username", user.username)
+            if (context.tokenType.value == OidcParameterNames.ID_TOKEN) {
+                // id_token: OIDC 표준 클레임 — sub를 안정적 식별자(user_id)로 덮어씀
+                context.claims.subject(user.id?.toString() ?: username)
+                context.claims.claim("preferred_username", user.username)
+            } else {
+                // access_token: jwt-server JwtClaimsFilter가 읽는 앱 전용 클레임
+                context.claims.claim("user_id", user.id?.toString() ?: "")
+                context.claims.claim("username", user.username)
+            }
         }
 
     @Bean
