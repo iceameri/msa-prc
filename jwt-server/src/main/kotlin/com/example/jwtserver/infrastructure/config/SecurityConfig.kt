@@ -1,15 +1,17 @@
 package com.example.jwtserver.infrastructure.config
 
-import com.example.jwtserver.infrastructure.security.CustomJwtAuthenticationConverter
+import com.example.jwtserver.infrastructure.security.JwtClaimsFilter
 import jakarta.servlet.DispatcherType
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
+import org.springframework.http.HttpMethod
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity
 import org.springframework.security.config.annotation.web.builders.HttpSecurity
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity
 import org.springframework.security.config.http.SessionCreationPolicy
-import org.springframework.http.HttpMethod
 import org.springframework.security.web.SecurityFilterChain
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter
+import jakarta.servlet.http.HttpServletResponse
 import org.springframework.web.cors.CorsConfiguration
 import org.springframework.web.cors.CorsConfigurationSource
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource
@@ -18,7 +20,7 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource
 @EnableWebSecurity
 @EnableMethodSecurity
 class SecurityConfig(
-    private val customJwtAuthenticationConverter: CustomJwtAuthenticationConverter
+    private val jwtClaimsFilter: JwtClaimsFilter
 ) {
 
     @Bean
@@ -34,11 +36,12 @@ class SecurityConfig(
             it.requestMatchers("/actuator/health", "/v3/api-docs/**", "/swagger-ui/**").permitAll()
             it.anyRequest().authenticated()
         }
-        http.oauth2ResourceServer {
-            it.jwt { jwt ->
-                jwt.jwtAuthenticationConverter(customJwtAuthenticationConverter)
+        http.exceptionHandling {
+            it.authenticationEntryPoint { _, response, _ ->
+                response.sendError(HttpServletResponse.SC_UNAUTHORIZED)
             }
         }
+        http.addFilterBefore(jwtClaimsFilter, UsernamePasswordAuthenticationFilter::class.java)
         return http.build()
     }
 

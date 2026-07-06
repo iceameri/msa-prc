@@ -15,13 +15,6 @@ spring:
   elasticsearch:
     uris: http://elasticsearch:9200
 
-  security:
-    oauth2:
-      resourceserver:
-        jwt:
-          issuer-uri: ${AUTH_ISSUER_URI}
-          jwk-set-uri: ${AUTH_ISSUER_URI}/oauth2/jwks
-
   sql:
     init:
       mode: always

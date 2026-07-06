@@ -1,0 +1,41 @@
+---
+# 인증 없이 허용할 공개 경로 (health check, Swagger, CORS preflight)
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: jwt-server-allow-public
+  namespace: msa
+spec:
+  selector:
+    matchLabels:
+      app: jwt-server
+  action: ALLOW
+  rules:
+    - to:
+        - operation:
+            paths:
+              - /actuator/health
+              - /v3/api-docs
+              - /v3/api-docs/*
+              - /swagger-ui.html
+              - /swagger-ui/*
+    - to:
+        - operation:
+            methods: ["OPTIONS"]
+---
+# 유효한 JWT가 있는 요청만 허용
+# RequestAuthentication에서 검증 통과한 토큰만 requestPrincipal이 설정됨
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: jwt-server-require-jwt
+  namespace: msa
+spec:
+  selector:
+    matchLabels:
+      app: jwt-server
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            requestPrincipals: ["*"]

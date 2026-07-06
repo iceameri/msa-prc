@@ -34,13 +34,6 @@ spring:
   elasticsearch:
     uris: http://localhost:9200
 
-  # ── OAuth2 Resource Server (JWT 검증) ───────────────────
-  security:
-    oauth2:
-      resourceserver:
-        jwt:
-          issuer-uri: http://localhost:1010
-          jwk-set-uri: http://localhost:1010/oauth2/jwks
 
 # ── MinIO ──────────────────────────────────────────────────
 minio:

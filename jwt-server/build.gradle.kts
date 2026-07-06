@@ -24,9 +24,8 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-webmvc")
     implementation("org.jetbrains.kotlin:kotlin-reflect")
 
-    // Security & JWT Resource Server
+    // Security
     implementation("org.springframework.boot:spring-boot-starter-security")
-    implementation("org.springframework.boot:spring-boot-starter-oauth2-resource-server")
 
     // Database
     implementation("org.springframework.boot:spring-boot-starter-jdbc")

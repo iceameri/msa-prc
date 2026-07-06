@@ -1,0 +1,17 @@
+apiVersion: security.istio.io/v1
+kind: RequestAuthentication
+metadata:
+  name: jwt-server-jwt-auth
+  namespace: msa
+spec:
+  selector:
+    matchLabels:
+      app: jwt-server
+  jwtRules:
+    # issuer는 JWT의 iss 클레임 값과 정확히 일치해야 함
+    # AUTH_ISSUER_URI 환경변수에 설정된 실제 외부 공개 도메인으로 교체
+    - issuer: "https://auth.example.com"
+      # Istio sidecar가 JWKs를 클러스터 내부 DNS로 직접 조회
+      jwksUri: http://authorization-server.msa.svc.cluster.local:1010/oauth2/jwks
+      # Authorization 헤더를 앱까지 그대로 전달 (JwtClaimsFilter 클레임 파싱에 필요)
+      forwardOriginalToken: true
