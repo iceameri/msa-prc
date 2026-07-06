@@ -555,6 +555,9 @@ CORS (→ 각 서비스로 이관)
 K8s 배포 (k8s/)
 Phase 1 (완료): Helm values — Bitnami PostgreSQL·Redis·Kafka·MinIO·ELK·Prometheus·Grafana·Zipkin
 Phase 2 (완료): 서비스 매니페스트 — Deployment·Service·ConfigMap·Secret·HPA·PodDisruptionBudget
+- Deployment 공통 설정 (authorization-server / jwt-server / opaque-server)
+  - replicas: 2
+  - strategy: RollingUpdate (maxSurge: 1, maxUnavailable: 0) — 신규 파드 Ready 후 구 파드 제거 (무중단)
 Phase 3 (완료): Istio + K8s Gateway API + cert-manager
 
 k8s/gateway/
