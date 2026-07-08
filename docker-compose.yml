@@ -187,7 +187,7 @@ services:
     networks:
       - msa-network
 
-  # ── Search & Logging (ELK) ────────────────────────────────
+  # ── Search ────────────────────────────────────────────────
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.13.0
     container_name: elasticsearch
@@ -209,53 +209,60 @@ services:
     networks:
       - msa-network
 
-  logstash:
-    image: docker.elastic.co/logstash/logstash:8.13.0
-    container_name: logstash
+  # ── LGTM 모니터링 스택 ──────────────────────────────────────
+  loki:
+    image: grafana/loki:latest
+    container_name: loki
     restart: unless-stopped
-    depends_on:
-      elasticsearch:
-        condition: service_healthy
+    command: ["-config.file=/etc/loki/local-config.yaml"]
     ports:
-      - "5000:5000"
-      - "9600:9600"
+      - "3100:3100"
     volumes:
-      - ./monitoring/logstash/pipeline:/usr/share/logstash/pipeline
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:9600 || exit 1"]
-      interval: 15s
-      timeout: 10s
-      retries: 5
-      start_period: 60s
+      - ./infra/loki:/loki
     networks:
       - msa-network
 
-  kibana:
-    image: docker.elastic.co/kibana/kibana:8.13.0
-    container_name: kibana
+  tempo:
+    image: grafana/tempo:latest
+    container_name: tempo
     restart: unless-stopped
-    depends_on:
-      elasticsearch:
-        condition: service_healthy
+    command: ["-config.file=/etc/tempo/tempo.yaml"]
     ports:
-      - "5601:5601"
-    environment:
-      ELASTICSEARCH_HOSTS: http://elasticsearch:9200
+      - "3200:3200"
+      - "4317:4317"
+      - "4318:4318"
+    volumes:
+      - ./docker/tempo.yaml:/etc/tempo/tempo.yaml
+      - ./infra/tempo:/var/tempo
     networks:
       - msa-network
 
-  # ── Monitoring ────────────────────────────────────────────
-  prometheus:
-    image: prom/prometheus:latest
-    container_name: prometheus
+  mimir:
+    image: grafana/mimir:latest
+    container_name: mimir
     restart: unless-stopped
+    command: ["-config.file=/etc/mimir/mimir.yaml", "-target=all"]
     ports:
-      - "9090:9090"
+      - "9009:9009"
     volumes:
-      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
-      - ./infra/prometheus:/prometheus
+      - ./docker/mimir.yaml:/etc/mimir/mimir.yaml
+      - ./infra/mimir:/data/mimir
+    networks:
+      - msa-network
+
+  alloy:
+    image: grafana/alloy:latest
+    container_name: alloy
+    restart: unless-stopped
+    command: ["run", "--server.http.listen-addr=0.0.0.0:12345", "/etc/alloy/config.alloy"]
+    ports:
+      - "12345:12345"
+    volumes:
+      - ./docker/alloy.config:/etc/alloy/config.alloy
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    depends_on:
+      - mimir
     networks:
       - msa-network
 
@@ -264,7 +271,9 @@ services:
     container_name: grafana
     restart: unless-stopped
     depends_on:
-      - prometheus
+      - loki
+      - tempo
+      - mimir
     ports:
       - "3000:3000"
     environment:
@@ -272,20 +281,10 @@ services:
       GF_SECURITY_ADMIN_PASSWORD: admin
     volumes:
       - ./infra/grafana:/var/lib/grafana
-    networks:
-      - msa-network
-
-  # ── Tracing ───────────────────────────────────────────────
-  zipkin:
-    image: openzipkin/zipkin:latest
-    container_name: zipkin
-    restart: unless-stopped
-    ports:
-      - "9411:9411"
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning
     networks:
       - msa-network
 
 networks:
   msa-network:
     driver: bridge
-

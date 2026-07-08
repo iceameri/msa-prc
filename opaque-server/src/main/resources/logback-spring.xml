@@ -3,45 +3,31 @@
     <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
     <include resource="org/springframework/boot/logging/logback/console-appender.xml"/>
 
-    <springProperty scope="context" name="appName"      source="spring.application.name"/>
-    <springProperty scope="context" name="logstashHost" source="logging.logstash.host" defaultValue="localhost"/>
-    <springProperty scope="context" name="logstashPort" source="logging.logstash.port" defaultValue="5000"/>
+    <springProperty scope="context" name="appName" source="spring.application.name"/>
 
-    <appender name="LOGSTASH" class="net.logstash.logback.appender.LogstashTcpSocketAppender">
-        <destination>${logstashHost}:${logstashPort}</destination>
-        <reconnectionDelay>10 seconds</reconnectionDelay>
-        <connectionTimeout>5000</connectionTimeout>
-        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
-            <customFields>{"service":"${appName}"}</customFields>
-        </encoder>
-    </appender>
-
-    <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
-        <file>logs/${appName}.log</file>
-        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
-            <fileNamePattern>logs/${appName}_%d{yyyyMMdd}_%i.log</fileNamePattern>
-            <maxFileSize>100MB</maxFileSize>
-            <maxHistory>30</maxHistory>
-            <totalSizeCap>1GB</totalSizeCap>
-        </rollingPolicy>
-        <encoder>
-            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%X{traceId:-},%X{spanId:-}] [%thread] %logger{36} - %msg%n</pattern>
-        </encoder>
-    </appender>
-
-    <springProfile name="!prod">
-        <root level="DEBUG">
+    <springProfile name="k8s">
+        <appender name="LOKI" class="com.github.loki4j.logback.Loki4jAppender">
+            <http>
+                <url>http://loki:3100/loki/api/v1/push</url>
+            </http>
+            <format>
+                <label>
+                    <pattern>app=${appName},level=%level</pattern>
+                </label>
+                <message>
+                    <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%X{traceId:-},%X{spanId:-}] [%thread] %logger{36} - %msg%n</pattern>
+                </message>
+            </format>
+        </appender>
+        <root level="INFO">
             <appender-ref ref="CONSOLE"/>
-            <appender-ref ref="LOGSTASH"/>
-            <appender-ref ref="FILE"/>
+            <appender-ref ref="LOKI"/>
         </root>
     </springProfile>
 
-    <springProfile name="prod">
-        <root level="INFO">
+    <springProfile name="!k8s">
+        <root level="DEBUG">
             <appender-ref ref="CONSOLE"/>
-            <appender-ref ref="LOGSTASH"/>
-            <appender-ref ref="FILE"/>
         </root>
     </springProfile>
 </configuration>

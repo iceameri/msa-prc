@@ -51,9 +51,9 @@ dependencies {
     implementation("io.github.resilience4j:resilience4j-spring-boot4:2.4.0")
     implementation("org.springframework.boot:spring-boot-starter-aspectj")
 
-    // Tracing - Brave + Zipkin (Spring Boot 4.0: spring-boot-starter-zipkin으로 통합)
-    implementation("org.springframework.boot:spring-boot-starter-zipkin")
-    implementation("io.zipkin.brave:brave")
+    // Tracing - OpenTelemetry (LGTM)
+    implementation("io.micrometer:micrometer-tracing-bridge-otel")
+    implementation("io.opentelemetry:opentelemetry-exporter-otlp")
 
     // Swagger
     implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.3")
@@ -61,8 +61,8 @@ dependencies {
     // Prometheus Metrics
     implementation("io.micrometer:micrometer-registry-prometheus")
 
-    // Logstash (ELK)
-    implementation("net.logstash.logback:logstash-logback-encoder:8.0")
+    // Loki (로그 수집)
+    implementation("com.github.loki4j:loki-logback-appender:1.5.2")
 
     // Test
     testImplementation("org.springframework.boot:spring-boot-starter-test")

@@ -15,9 +15,11 @@ Docker-compose (로컬 개발)
 - postgres-auth (port 5432) → authorization_db
 - postgres-jwt  (port 5433) → jwt_db
 - postgres-opaque (port 5434) → opaque_db
-- redis, Kafka (KRaft), Kafka-connect, MinIO, Elasticsearch, Prometheus, Grafana, Zipkin, ELK Stack
+- redis, Kafka (KRaft), Kafka-connect, MinIO, Elasticsearch
+- LGTM 스택: Loki(3100), Tempo(3200·4317·4318), Mimir(9009), Alloy(12345), Grafana(3000)
+  - docker/tempo.yaml, docker/mimir.yaml, docker/alloy.config, docker/grafana/provisioning/ (git 추적)
+  - infra/ 디렉터리는 데이터 볼륨 전용 (.gitignore)
 - kafka_data 볼륨 추가 (재시작 시 토픽/오프셋 보존)
-- logstash healthcheck 추가 (port 9600, start_period 60s)
 - kafka-connect healthcheck 추가 (port 8083, start_period 30s)
 - kafka-init 제거 → 토픽 생성은 각 서비스 KafkaTopicConfig로 대체
 
@@ -91,13 +93,15 @@ Common
   - ~~health-check-url-path: /actuator/health~~
   - ~~status-page-url-path: /actuator/info~~
 - Prometheus 메트릭 수집 (micrometer-registry-prometheus, /actuator/prometheus)
-- Logstash 로그 연동 (logback-spring.xml, LogstashTcpSocketAppender)
-  - dev: DEBUG / prod: INFO
-  - 서비스명(service 필드)으로 Kibana 필터링
-  - Logstash 주소 외부화: logging.logstash.host / logging.logstash.port (springProperty)
-    - 로컬: defaultValue="localhost:5000"
-    - ~~Docker/prod: config-server application.yaml → logstash:5000~~
-  - reconnectionDelay: 10s, connectionTimeout: 5000ms (Logstash down 시 무한 블로킹 방지)
+- LGTM 스택 (Loki + Grafana + Tempo + Mimir + Alloy) — ELK·Zipkin 대체
+  - Tracing: micrometer-tracing-bridge-otel + opentelemetry-exporter-otlp
+    - 로컬: management.otlp.tracing.endpoint=http://localhost:4318/v1/traces (Tempo 직접 전송)
+    - K8s: management.otlp.tracing.endpoint=http://tempo:4318/v1/traces
+  - Logging: com.github.loki4j:loki-logback-appender:1.5.2 (Spring Boot BOM 미관리 → 버전 명시)
+    - k8s 프로파일에서만 Loki4jAppender 활성화 (로컬은 CONSOLE only — 연결 오류 방지)
+    - 레이블: app=${appName},level=%level / 메시지 패턴에 traceId·spanId 포함 (Tempo 연동)
+  - Metrics: Alloy가 /actuator/prometheus 스크레이프 → Mimir remote_write (로컬: host.docker.internal 경유)
+  - Grafana 데이터소스 자동 프로비저닝: Mimir(기본)/Loki/Tempo, TraceID↔Loki 연동 설정
 
 
 authorization-server
@@ -555,7 +559,7 @@ CORS (→ 각 서비스로 이관)
 - ~~response-cache-update-interval-ms: 3000 (기본 30000 → 레지스트리 캐시 갱신 주기)~~
 
 K8s 배포 (k8s/)
-Phase 1 (완료): Helm values — Bitnami PostgreSQL·Redis·Kafka·MinIO·ELK·Prometheus·Grafana·Zipkin
+Phase 1 (완료): Helm values — Bitnami PostgreSQL·Redis·Kafka·MinIO + LGTM (Loki·Tempo·Mimir·Alloy·Grafana)
 Phase 2 (완료): 서비스 매니페스트 — Deployment·Service·ConfigMap·Secret·HPA·PodDisruptionBudget
 - Deployment 공통 설정 (authorization-server / jwt-server / opaque-server)
   - replicas: 2
@@ -595,8 +599,12 @@ k8s/helm/
 ⚠️ 배포 전 교체 필요: api.example.com (도메인), user@example.com (cert-manager 이메일), auth.example.com (request-authentication.yaml issuer — AUTH_ISSUER_URI 실제 값)
 ⚠️ Git 커밋 금지: k8s/apps/*-secret.yaml (실제 값 채운 후 kubectl apply만)
 
-monitoring
-- Prometheus + Grafana (메트릭 수집 및 시각화)
-- Zipkin (분산 추적 시각화)
-- ELK Stack (Elasticsearch + Logstash + Kibana, 중앙 로그 수집)
-  - 인덱스 패턴: msa-prc-{service}-{date}
+LGTM 모니터링 스택 (ELK·Zipkin·Prometheus 대체)
+- 도입 목적: 관찰성의 세 가지 기둥(로그·메트릭·트레이스)을 하나의 플랫폼에서 통합적으로 다룰 수 있다
+- Loki: 로그 집계 (Loki4jAppender가 K8s 환경에서 직접 push)
+  - 핵심 철학: 로그 내용을 인덱싱하지 말고, 메타데이터만 인덱싱하자 → 저장 비용 절감, 스트림 기반 쿼리
+- Tempo: 분산 추적 (OTLP HTTP 4318 / gRPC 4317 수신)
+- Mimir: 메트릭 장기 저장 (Prometheus 호환 remote_write API)
+- Alloy: 메트릭 수집기 (Spring Boot Actuator /actuator/prometheus 스크레이프 → Mimir 전송), 인프라 Pod 로그 수집
+- Grafana: 통합 시각화 (Mimir·Loki·Tempo 데이터소스 자동 프로비저닝, TraceID ↔ 로그 연동)
+- Elasticsearch: jwt-server 검색 기능 전용으로 유지 (로그 수집 목적 제거)

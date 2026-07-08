@@ -36,14 +36,11 @@ spring:
         - classpath:sql/ddl/outbox_events.sql
 
 management:
-  zipkin:
+  otlp:
     tracing:
-      endpoint: http://zipkin:9411/api/v2/spans
+      endpoint: http://tempo:4318/v1/traces
 
 logging:
-  logstash:
-    host: logstash
-    port: 5000
   level:
     root: INFO
     com.example: INFO
