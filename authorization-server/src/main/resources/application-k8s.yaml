@@ -37,6 +37,15 @@ spring:
 rsa:
   key-path: /app/keys
 
+resilience4j:
+  circuitbreaker:
+    instances:
+      authorization-db:
+        sliding-window-size: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+        permitted-number-of-calls-in-half-open-state: 2
+
 management:
   otlp:
     tracing:
