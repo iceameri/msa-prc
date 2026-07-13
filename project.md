@@ -159,9 +159,23 @@ QR 로그인
 - token: Redis 저장 (auth:reset:{token} → username, TTL 30분)
 
 동시 세션 제한
-- SessionLimitingAuthorizationService가 JdbcOAuth2AuthorizationService를 래핑
+- SessionLimitingAuthorizationService → RedisBackedOAuth2AuthorizationService → JdbcOAuth2AuthorizationService 3-레이어 구조
 - opaque-server-client 토큰 발급 시 oauth2_authorization 테이블에서 해당 사용자 세션 수 조회
-- 5개 초과 시 가장 오래된 세션부터 revoke
+- 5개 초과 시 가장 오래된 세션부터 revoke (delegate.remove()가 RedisBackedOAuth2AuthorizationService 경유 → Redis 캐시 자동 정리)
+
+OAuth2 Token Redis 캐시 (token store DB 부하 감소)
+- RedisBackedOAuth2AuthorizationService: JdbcOAuth2AuthorizationService 래핑, SessionLimitingAuthorizationService의 delegate
+- Redis 키: oauth2:token:{tokenValue} → authorizationId (StringRedisTemplate, String → String)
+  - access token / refresh token / id_token / auth code 모두 각각 적재
+- findByToken(): Redis 조회 → 캐시 히트 시 findById(PK) → 캐시 미스 시 DB 풀쿼리 후 Redis 적재
+  - DB에 없으면 null 반환 (Spring AS가 invalid token으로 처리)
+  - 스테일 캐시 자가 치유: findById() null 반환 시 해당 Redis 키 즉시 삭제
+- save(): DB 저장 후 모든 토큰 값 Redis 적재
+- remove(): DB 삭제 후 모든 토큰 값 Redis 제거
+- TTL: refresh token 만료 기준 → access token 만료 기준 → 30분 fallback (expiresAt null 또는 이미 만료 시)
+- Redis 장애: runCatching 흡수 → DB 직접 조회 투명 폴백
+- DB 장애: CircuitBreaker("authorization-db") open 시 즉시 예외 (인트로스펙션 실패)
+  - 로컬 캐시 폴백 미사용: replicas=2 환경에서 인스턴스 간 토큰 폐기 불일치 → 폐기 토큰이 다른 인스턴스에서 유효로 판정되는 보안 위험
 
 Redis 키 네임스페이스 (단일 Redis 인스턴스, prefix로 논리 분리)
 - auth:user:{username}        → 유저 객체 캐시 (TTL 30분)
@@ -170,6 +184,7 @@ Redis 키 네임스페이스 (단일 Redis 인스턴스, prefix로 논리 분리
 - auth:qr:{token}             → QR 로그인 세션 (TTL 5분)
 - auth:reset:{token}          → 비밀번호 재설정 토큰 (TTL 30분)
 - jwt:authorities:{username}  → 유저 권한 목록 (TTL 24h) ← authorization-server write / jwt-server·opaque-server read
+- oauth2:token:{tokenValue}   → authorizationId (TTL: refresh token 만료 기준, StringRedisTemplate) ← RedisBackedOAuth2AuthorizationService
 
 CORS
 - SecurityConfig에 CorsConfigurationSource 빈 등록 (두 필터 체인 모두 적용)
@@ -193,7 +208,7 @@ Clean Architecture 구조
 - application/service: UserDetailsServiceImpl, LoginAttemptService, MfaService, QrLoginService, PasswordResetService
 - infrastructure/persistence: UserJdbcRepository (ResultSetExtractor + LEFT JOIN, mfa/status/last_active_at 컬럼, findByEmail; save() 후 user-sync 이벤트 발행; updateUsername() 후 user.username.updated 이벤트 발행), UserActivityJdbcRepository (user_activity UPSERT)
 - infrastructure/cache: RedisUserCache, RedisQrLoginCache, RedisPasswordResetCache
-- infrastructure/oauth2: SessionLimitingAuthorizationService, TokenRevocationService (principal_name 기준 oauth2_authorization 전체 삭제 — SUSPEND/BAN/DELETE 시 기존 토큰 즉시 폐기)
+- infrastructure/oauth2: SessionLimitingAuthorizationService, RedisBackedOAuth2AuthorizationService (Redis 캐시 레이어 — StringRedisTemplate + CircuitBreaker("authorization-db")), TokenRevocationService (principal_name 기준 oauth2_authorization 전체 삭제 — SUSPEND/BAN/DELETE 시 기존 토큰 즉시 폐기)
 - infrastructure/security: LoginSuccessHandler (MFA 분기), LoginFailureHandler, RedisLogoutHandler (LogoutHandler 구현)
 - infrastructure/kafka: UserManagementEventConsumer (user-management 토픽 구독 → userId 기반 setStatusAndEnabled 단일 쿼리 + Redis 무효화 + TokenRevocationService 토큰 폐기), UserActivityEventConsumer (user-active 토픽 구독 → user_activity UPSERT), UserSyncEventPublisher (user-sync 토픽 발행 + user.username.updated 토픽 발행)
   - UserSyncEventPublisher.publish(): enabled, status 파라미터 포함 (jwt-server 계정 상태 동기화)
