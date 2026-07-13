@@ -40,8 +40,9 @@ dependencies {
     // Elasticsearch
     implementation("org.springframework.boot:spring-boot-starter-data-elasticsearch")
 
-    // MinIO
-    implementation("io.minio:minio:8.5.17")
+    // AWS S3 (S3 사용 시 주석 해제)
+    // implementation(platform("software.amazon.awssdk:bom:2.28.0"))
+    // implementation("software.amazon.awssdk:s3")
 
     // Validation
     implementation("org.springframework.boot:spring-boot-starter-validation")

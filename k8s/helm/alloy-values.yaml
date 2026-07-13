@@ -33,7 +33,7 @@ alloy:
         targets = discovery.kubernetes.infra_pods.targets
         rule {
           source_labels = ["__meta_kubernetes_pod_label_app"]
-          regex = "kafka|redis|postgres.*|elasticsearch|minio"
+          regex = "kafka|redis|postgres.*|elasticsearch"
           action = "keep"
         }
         rule {

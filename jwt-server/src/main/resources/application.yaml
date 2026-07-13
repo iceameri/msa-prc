@@ -35,12 +35,12 @@ spring:
     uris: http://localhost:9200
 
 
-# ── MinIO ──────────────────────────────────────────────────
-minio:
-  endpoint: http://localhost:9000
-  access-key: minioadmin
-  secret-key: minioadmin
-  bucket-name: jwt-server
+# ── AWS S3 (S3 사용 시 주석 해제) ──────────────────────────
+# s3:
+#   region: ap-northeast-2
+#   access-key: ${AWS_ACCESS_KEY_ID}
+#   secret-key: ${AWS_SECRET_ACCESS_KEY}
+#   bucket-name: jwt-server
 
 # ── Actuator & Monitoring ─────────────────────────────────
 management:

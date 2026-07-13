@@ -30,10 +30,10 @@ spring:
         - classpath:sql/ddl/outbox_events.sql
         - classpath:sql/ddl/processed_kafka_events.sql
 
-minio:
-  endpoint: http://minio:9000
-  access-key: ${MINIO_ACCESS_KEY}
-  secret-key: ${MINIO_SECRET_KEY}
+# s3:
+#   region: ${AWS_REGION:ap-northeast-2}
+#   access-key: ${AWS_ACCESS_KEY_ID}
+#   secret-key: ${AWS_SECRET_ACCESS_KEY}
 
 management:
   otlp:
