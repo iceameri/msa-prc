@@ -1,9 +1,11 @@
 package com.example.jwtserver.infrastructure.config
 
+import com.example.jwtserver.infrastructure.ratelimit.OpenApiRateLimitFilter
 import com.example.jwtserver.infrastructure.security.JwtClaimsFilter
 import jakarta.servlet.DispatcherType
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
+import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.http.HttpMethod
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity
 import org.springframework.security.config.annotation.web.builders.HttpSecurity
@@ -15,12 +17,15 @@ import jakarta.servlet.http.HttpServletResponse
 import org.springframework.web.cors.CorsConfiguration
 import org.springframework.web.cors.CorsConfigurationSource
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource
+import tools.jackson.databind.ObjectMapper
 
 @Configuration
 @EnableWebSecurity
 @EnableMethodSecurity
 class SecurityConfig(
-    private val jwtClaimsFilter: JwtClaimsFilter
+    private val jwtClaimsFilter: JwtClaimsFilter,
+    private val redis: StringRedisTemplate,
+    private val objectMapper: ObjectMapper
 ) {
 
     @Bean
@@ -42,6 +47,7 @@ class SecurityConfig(
             }
         }
         http.addFilterBefore(jwtClaimsFilter, UsernamePasswordAuthenticationFilter::class.java)
+        http.addFilterAfter(OpenApiRateLimitFilter(redis, objectMapper), JwtClaimsFilter::class.java)
         return http.build()
     }
 

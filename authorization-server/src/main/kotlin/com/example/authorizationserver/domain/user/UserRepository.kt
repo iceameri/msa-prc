@@ -4,6 +4,7 @@ import java.time.Instant
 
 interface UserRepository {
     fun findByUsername(username: String): User?
+    fun findByUsernameAndTenantId(username: String, tenantId: Long): User?
     fun findById(id: Long): User?
     fun findByEmail(email: String): User?
     fun save(user: User): User

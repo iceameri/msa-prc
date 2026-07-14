@@ -27,6 +27,7 @@ class UserJdbcRepository(
             if (user == null) {
                 user = User(
                     id = rs.getLong("user_id").takeIf { it != 0L },
+                    tenantId = rs.getLong("tenant_id").takeIf { !rs.wasNull() },
                     username = rs.getString("username"),
                     password = rs.getString("password"),
                     email = rs.getString("email"),
@@ -51,10 +52,22 @@ class UserJdbcRepository(
             SELECT      u.*, ua.authority
             FROM        authorization_db.public.users u
             LEFT JOIN   authorization_db.public.user_authorities ua ON u.user_id = ua.user_id
-            WHERE       u.username = ?
+            WHERE       u.username = ? AND u.tenant_id IS NULL
             """.trimIndent(),
             userExtractor,
             username
+        )
+
+    override fun findByUsernameAndTenantId(username: String, tenantId: Long): User? =
+        jdbcTemplate.query(
+            """
+            SELECT      u.*, ua.authority
+            FROM        authorization_db.public.users u
+            LEFT JOIN   authorization_db.public.user_authorities ua ON u.user_id = ua.user_id
+            WHERE       u.username = ? AND u.tenant_id = ?
+            """.trimIndent(),
+            userExtractor,
+            username, tenantId
         )
 
     override fun findById(id: Long): User? =
@@ -87,17 +100,17 @@ class UserJdbcRepository(
             val userId = jdbcTemplate.queryForObject<Long>(
                 """
                 INSERT INTO authorization_db.public.users
-                (username, password, email, full_name, enabled, status, login_attempts, locked_until)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                (tenant_id, username, password, email, full_name, enabled, status, login_attempts, locked_until)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 RETURNING user_id
                 """.trimIndent(),
-                user.username, user.password, user.email, user.fullName,
+                user.tenantId, user.username, user.password, user.email, user.fullName,
                 user.enabled, user.status, user.loginAttempts,
                 user.lockedUntil?.let { Timestamp.from(it) }
             )!!
             val saved = user.copy(id = userId)
             syncAuthorities(userId, user.authorities)
-            userSyncEventPublisher.publish(userId, user.username, user.enabled, user.status, version = 1L)
+            userSyncEventPublisher.publish(userId, user.username, user.tenantId, user.enabled, user.status, version = 1L)
             saved
         } else {
             val newVersion = jdbcTemplate.queryForObject<Long>(
@@ -114,7 +127,7 @@ class UserJdbcRepository(
                 user.id
             )!!
             syncAuthorities(user.id, user.authorities)
-            userSyncEventPublisher.publish(user.id, user.username, user.enabled, user.status, newVersion)
+            userSyncEventPublisher.publish(user.id, user.username, user.tenantId, user.enabled, user.status, newVersion)
             user
         }
     }
@@ -158,17 +171,17 @@ class UserJdbcRepository(
             UPDATE  authorization_db.public.users
             SET     enabled = ?, status = ?, version = version + 1
             WHERE   user_id = ?
-            RETURNING username, version
+            RETURNING username, tenant_id, version
             """.trimIndent(),
-            { rs, _ -> Pair(rs.getString("username"), rs.getLong("version")) },
+            { rs, _ -> Triple(rs.getString("username"), rs.getLong("tenant_id").takeIf { !rs.wasNull() }, rs.getLong("version")) },
             enabled, status, userId
         ).firstOrNull()
         if (matched == null) {
             log.warn("setStatusAndEnabled: no user found for userId={}, skipping Kafka publish", userId)
             return
         }
-        val (username, version) = matched
-        userSyncEventPublisher.publish(userId, username, enabled, status, version)
+        val (username, tenantId, version) = matched
+        userSyncEventPublisher.publish(userId, username, tenantId, enabled, status, version)
     }
 
     override fun updateUsername(userId: Long, newUsername: String) {

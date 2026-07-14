@@ -22,15 +22,25 @@ class RedisUserCache(
         private val MFA_PENDING_TTL = Duration.ofMinutes(10)
     }
 
+    private fun userKey(username: String, tenantId: Long? = null): String =
+        if (tenantId != null) "$USER_PREFIX$tenantId:$username" else "$USER_PREFIX$username"
+
     override fun getUser(username: String): User? =
-        redisTemplate.opsForValue().get("$USER_PREFIX$username") as? User
+        redisTemplate.opsForValue().get(userKey(username)) as? User
+
+    override fun getUser(username: String, tenantId: Long): User? =
+        redisTemplate.opsForValue().get(userKey(username, tenantId)) as? User
 
     override fun saveUser(user: User) {
-        redisTemplate.opsForValue().set("$USER_PREFIX${user.username}", user, USER_TTL)
+        redisTemplate.opsForValue().set(userKey(user.username, user.tenantId), user, USER_TTL)
     }
 
     override fun deleteUser(username: String) {
-        redisTemplate.delete("$USER_PREFIX$username")
+        redisTemplate.delete(userKey(username))
+    }
+
+    override fun deleteUser(username: String, tenantId: Long) {
+        redisTemplate.delete(userKey(username, tenantId))
     }
 
     override fun deleteAuthorities(username: String) {

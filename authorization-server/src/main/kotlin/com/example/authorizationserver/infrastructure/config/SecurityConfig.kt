@@ -1,5 +1,8 @@
 package com.example.authorizationserver.infrastructure.config
 
+import com.example.authorizationserver.application.service.ApiKeyService
+import com.example.authorizationserver.infrastructure.oauth2.apikey.ApiKeyGrantAuthenticationConverter
+import com.example.authorizationserver.infrastructure.oauth2.apikey.ApiKeyGrantAuthenticationProvider
 import com.example.authorizationserver.infrastructure.security.LoginFailureHandler
 import com.example.authorizationserver.infrastructure.security.LoginSuccessHandler
 import com.example.authorizationserver.infrastructure.security.RedisLogoutHandler
@@ -12,6 +15,9 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity
 import org.springframework.security.crypto.factory.PasswordEncoderFactories
 import org.springframework.security.crypto.password.PasswordEncoder
+import org.springframework.security.oauth2.jwt.JwtEncoder
+import org.springframework.security.oauth2.server.authorization.OAuth2AuthorizationService
+import org.springframework.security.oauth2.server.authorization.settings.AuthorizationServerSettings
 import org.springframework.security.web.SecurityFilterChain
 import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint
 import org.springframework.security.web.util.matcher.MediaTypeRequestMatcher
@@ -25,7 +31,11 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource
 class SecurityConfig(
     private val loginSuccessHandler: LoginSuccessHandler,
     private val loginFailureHandler: LoginFailureHandler,
-    private val redisLogoutHandler: RedisLogoutHandler
+    private val redisLogoutHandler: RedisLogoutHandler,
+    private val apiKeyService: ApiKeyService,
+    private val authorizationService: OAuth2AuthorizationService,
+    private val jwtEncoder: JwtEncoder,
+    private val authorizationServerSettings: AuthorizationServerSettings
 ) {
 
     @Bean
@@ -35,6 +45,18 @@ class SecurityConfig(
             .oauth2AuthorizationServer { authorizationServer ->
                 http.securityMatcher(authorizationServer.endpointsMatcher)
                 authorizationServer.oidc(Customizer.withDefaults())
+                authorizationServer.tokenEndpoint { endpoint ->
+                    endpoint.accessTokenRequestConverters { converters ->
+                        converters.add(ApiKeyGrantAuthenticationConverter())
+                    }
+                    endpoint.authenticationProviders { providers ->
+                        providers.add(
+                            ApiKeyGrantAuthenticationProvider(
+                                apiKeyService, authorizationService, jwtEncoder, authorizationServerSettings
+                            )
+                        )
+                    }
+                }
             }
             .cors { it.configurationSource(corsConfigurationSource()) }
             .authorizeHttpRequests { it.anyRequest().authenticated() }

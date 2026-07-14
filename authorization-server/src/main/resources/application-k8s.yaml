@@ -25,6 +25,7 @@ spring:
     init:
       mode: always
       schema-locations:
+        - classpath:sql/ddl/tenants.sql
         - classpath:sql/ddl/users.sql
         - classpath:sql/ddl/user_authorities.sql
         - classpath:sql/ddl/user_activity.sql
@@ -32,6 +33,8 @@ spring:
         - classpath:sql/ddl/oauth2_registered_client.sql
         - classpath:sql/ddl/oauth2_authorization.sql
         - classpath:sql/ddl/oauth2_authorization_consent.sql
+        - classpath:sql/ddl/api_keys.sql
+        - classpath:sql/migration/add_tenant_to_users.sql
 
 # RSA 키페어 마운트 경로 (k8s Secret → /app/keys 볼륨)
 rsa:

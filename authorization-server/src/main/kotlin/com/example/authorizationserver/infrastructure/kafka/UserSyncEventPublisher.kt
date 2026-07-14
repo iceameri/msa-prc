@@ -10,10 +10,11 @@ class UserSyncEventPublisher(private val kafkaTemplate: KafkaTemplate<String, St
 
     private val log = LoggerFactory.getLogger(javaClass)
 
-    fun publish(userId: Long, username: String, enabled: Boolean, status: String, version: Long) {
+    fun publish(userId: Long, username: String, tenantId: Long?, enabled: Boolean, status: String, version: Long) {
+        val tenantField = if (tenantId != null) ""","tenantId":$tenantId""" else ""","tenantId":null"""
         kafkaTemplate.send(
             "user-sync", userId.toString(),
-            """{"userId":$userId,"username":"${username.escapeJson()}","enabled":$enabled,"status":"$status","version":$version}"""
+            """{"userId":$userId,"username":"${username.escapeJson()}"$tenantField,"enabled":$enabled,"status":"$status","version":$version}"""
         ).whenComplete { _, ex ->
             if (ex != null) log.warn("Failed to publish user-sync event userId={}: {}", userId, ex.message)
         }

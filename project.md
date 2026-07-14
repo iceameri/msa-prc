@@ -178,13 +178,16 @@ OAuth2 Token Redis 캐시 (token store DB 부하 감소)
   - 로컬 캐시 폴백 미사용: replicas=2 환경에서 인스턴스 간 토큰 폐기 불일치 → 폐기 토큰이 다른 인스턴스에서 유효로 판정되는 보안 위험
 
 Redis 키 네임스페이스 (단일 Redis 인스턴스, prefix로 논리 분리)
-- auth:user:{username}        → 유저 객체 캐시 (TTL 30분)
-- auth:attempts:{username}    → 로그인 시도 횟수 (TTL 30분)
-- auth:mfa:pending:{username} → MFA setup 임시 secret (TTL 10분)
-- auth:qr:{token}             → QR 로그인 세션 (TTL 5분)
-- auth:reset:{token}          → 비밀번호 재설정 토큰 (TTL 30분)
-- jwt:authorities:{username}  → 유저 권한 목록 (TTL 24h) ← authorization-server write / jwt-server·opaque-server read
-- oauth2:token:{tokenValue}   → authorizationId (TTL: refresh token 만료 기준, StringRedisTemplate) ← RedisBackedOAuth2AuthorizationService
+- auth:user:{username}               → 플랫폼 유저 객체 캐시 (TTL 30분)
+- auth:user:{tenantId}:{username}    → 테넌트 유저 객체 캐시 (TTL 30분)
+- auth:attempts:{username}           → 로그인 시도 횟수 (TTL 30분)
+- auth:mfa:pending:{username}        → MFA setup 임시 secret (TTL 10분)
+- auth:qr:{token}                    → QR 로그인 세션 (TTL 5분)
+- auth:reset:{token}                 → 비밀번호 재설정 토큰 (TTL 30분)
+- jwt:authorities:{username}         → 유저 권한 목록 (TTL 24h) ← authorization-server write / jwt-server·opaque-server read
+- oauth2:token:{tokenValue}          → authorizationId (TTL: refresh token 만료 기준, StringRedisTemplate) ← RedisBackedOAuth2AuthorizationService
+- rl:config:{apiKeyId}               → Open API 키 레이트리밋 설정 "{burst}:{refill}" (영구, 키 폐기 시 삭제)
+- rl:count:{apiKeyId}:{minuteWindow} → Open API 키 분당 요청 카운터 (TTL 2분, INCR 원자적)
 
 CORS
 - SecurityConfig에 CorsConfigurationSource 빈 등록 (두 필터 체인 모두 적용)
@@ -195,10 +198,13 @@ CORS
 JWT 클레임 커스터마이징
 - OAuth2TokenCustomizerConfig: OAuth2TokenCustomizer<JwtEncodingContext> 빈 등록 (토큰 타입별 분기)
   - access_token (유저): user_id=userId.toString(), username 클레임 추가 (jwt-server JwtClaimsFilter용)
+  - access_token (테넌트 유저): tenant_id 클레임 추가 (TenantAwareUserDetails에서 추출)
   - id_token (OIDC): sub=userId.toString() (안정적 식별자), preferred_username=username (OIDC 표준 클레임)
   - client_credentials: client_id 클레임 추가, user_id/username 없음
+  - api-key 커스텀 그랜트: no-op (claims를 ApiKeyGrantAuthenticationProvider가 직접 설정)
+  - refresh token 폴백: TenantAwareUserDetails 없을 경우 userCachePort/userRepository로 userId 재조회
 - OAuth2TokenCustomizerConfig: OAuth2TokenCustomizer<OAuth2TokenClaimsContext> 빈 등록 (opaque token 전용)
-  - 유저 토큰: sub = userId.toString() (opaque introspector가 toLongOrNull()로 유저 감지), username 클레임 추가
+  - 유저 토큰: sub = userId.toString() (opaque introspector가 toLongOrNull()로 유저 감지), username 클레임 추가, tenant_id 추가 (테넌트 유저인 경우)
   - client_credentials: 아무것도 추가하지 않음 → sub = client_id (Spring 기본값, 비숫자)
 
 Clean Architecture 구조
@@ -218,6 +224,39 @@ Clean Architecture 구조
 - infrastructure/config: SecurityConfig (logout 블록 추가), AuthorizationServerConfig, OAuth2TokenCustomizerConfig, RedisConfig, SwaggerConfig, KafkaProducerConfig (KafkaTemplate<String,String> 명시적 빈 + user-sync/user.username.updated NewTopic)
 - presentation: MfaController, QrLoginController, PasswordResetController, BatchController (수동 실행: POST /admin/batch/inactive-user-cleanup → 처리된 유저 수 반환)
 
+Multi-tenancy
+- ?tenant={slug} 쿼리 파라미터로 테넌트 식별 (모든 인증 요청에 적용)
+- TenantResolutionFilter (@Component @Order(HIGHEST_PRECEDENCE)): slug → tenants 테이블 조회 → TenantContext.set(tenantId) → finally 블록에서 TenantContext.clear()
+- TenantContext (object): ThreadLocal<Long?> 기반, set/get/clear 메서드
+- users.tenant_id IS NULL = 플랫폼 유저, IS NOT NULL = 테넌트 유저 (기존 플랫폼 유저 하위 호환)
+- UserDetailsServiceImpl: TenantContext.get() null이면 findByUsername (플랫폼), 아니면 findByUsernameAndTenantId (테넌트)
+- 유저 캐시 키 분기: 플랫폼 → auth:user:{username}, 테넌트 → auth:user:{tenantId}:{username}
+- TenantAwareUserDetails: UserDetails 구현체, tenantId: Long? 및 userId: Long? 필드 추가
+  - 인증 성공 시 SecurityContext에 담겨 OAuth2TokenCustomizerConfig에서 tenant_id 클레임 주입에 사용
+- Kafka user-sync 이벤트 페이로드에 tenantId 필드 포함 (null 또는 Long)
+- UserManagementEventConsumer의 RESTORE/evict: user.tenantId null 여부로 캐시 키 분기
+- 기존 DB 마이그레이션: sql/migration/add_tenant_to_users.sql (멱등, ALTER TABLE IF NOT EXISTS + 기존 UNIQUE 제거 + 부분 인덱스 생성)
+
+Open API Key (커스텀 그랜트 타입)
+- 커스텀 그랜트 타입: urn:example:grant-type:api-key (shared openapi-client RegisteredClient 사용)
+- API 키 형식: sk_{8자리prefix}_{48바이트 base64} (총 ~80자), 저장은 SHA-256 hex hash(64자)
+- ApiKeyGrantAuthenticationConverter: grant_type == api-key 감지 → api_key 파라미터 추출 → ApiKeyGrantAuthenticationToken 생성
+- ApiKeyGrantAuthenticationProvider:
+  - ApiKeyService.validateAndGet(rawKey)으로 키 검증 (hash 조회 + status/expiry 확인)
+  - NimbusJwtEncoder로 JWT 직접 발급 (claims: issuer, sub=clientId, tenant_id, api_key_id, scope)
+  - OAuth2AuthorizationService에 저장 후 OAuth2AccessTokenAuthenticationToken 반환
+  - jwtEncoder 빈 별도 등록 (AuthorizationServerConfig): NimbusJwtEncoder(jwkSource) — OAuth2TokenGenerator 순환의존 회피
+- SecurityConfig.authorizationServer.tokenEndpoint { }: converter + provider 등록
+- ApiKeyService.create(): rawKey 생성 → DB 저장 → rl:config:{id} Redis 적재
+- ApiKeyService.revoke(): status=REVOKED + rl:config:{id} 삭제
+- ApiKeyController: POST /api/keys, GET /api/keys/tenant/{tenantId}, DELETE /api/keys/{id}
+- Rate Limiting (OpenApiRateLimitFilter, OncePerRequestFilter):
+  - /openapi/** 경로만 적용 (shouldNotFilter)
+  - JWT payload Base64 파싱으로 api_key_id 추출 (서명 검증 없음, Istio 위임)
+  - Redis: INCR rl:count:{apiKeyId}:{minuteWindow} → burst 초과 시 429
+  - rl:config:{apiKeyId}에서 burst 값 조회, Redis 장애 시 runCatching으로 요청 허용(fail-open)
+  - jwt-server: JwtClaimsFilter 이후 추가 / opaque-server: @Order(1) openApiFilterChain에 추가
+
 주요 설계 결정
 - http.userDetailsService() Spring Security 7에서 제거 → @Service bean 자동 감지로 대체
 - AuthorizationServerConfig issuer: 필드 주입(lateinit var) → 생성자 주입으로 변경
@@ -235,11 +274,20 @@ Clean Architecture 구조
 - 수동 실행: POST /admin/batch/inactive-user-cleanup → {"queued": N, "status": "COMPLETED"}
 
 DDL (authorization_db) — FK 논리적 사용 (REFERENCES 제약 없음)
-- users: id(BIGSERIAL PK), username, password, email, enabled, status(ACTIVE/SUSPENDED/BANNED/DELETED), login_attempts, locked_until, last_active_at, created_at, mfa_enabled, mfa_secret, version BIGINT DEFAULT 1 (이벤트 발행 횟수 — jwt-server out-of-order 판정 기준)
+- tenants: id(BIGSERIAL PK), name(VARCHAR 100), slug(VARCHAR 50, UNIQUE), status(ACTIVE), created_at
+  - idx_tenants_slug: slug 조회 최적화
+- users: id(BIGSERIAL PK), tenant_id(BIGINT, NULL=플랫폼 유저), username, password, email, enabled, status, login_attempts, locked_until, last_active_at, created_at, mfa_enabled, mfa_secret, version BIGINT DEFAULT 1
+  - 부분 유니크 인덱스: idx_users_username_no_tenant (tenant_id IS NULL), idx_users_email_no_tenant (tenant_id IS NULL)
+  - 부분 유니크 인덱스: idx_users_username_tenant (tenant_id IS NOT NULL), idx_users_email_tenant (tenant_id IS NOT NULL)
+  - idx_users_tenant_id: 테넌트별 유저 조회 최적화
+  - tenant_id IS NULL = 플랫폼 유저 (기존 호환), NOT NULL = 테넌트 유저 (신규)
+- api_keys: id(BIGSERIAL PK), tenant_id(BIGINT NOT NULL), key_hash(VARCHAR 64, UNIQUE), key_prefix(VARCHAR 12), name, status(ACTIVE/REVOKED), rate_limit_burst(INT DEFAULT 100), rate_limit_refill(INT DEFAULT 50), created_at, expires_at, last_used_at
+  - idx_api_keys_tenant_id, idx_api_keys_key_prefix
 - user_authorities: user_id (logical FK → users.id), authority — 복수 권한 지원
 - user_activity: user_id(BIGINT PK, logical FK → users.id), last_active_at
 - authorization_system_clients: client_id(VARCHAR PK), display_name — 시스템 클라이언트 원본 (jwt_db.authorization_system_clients의 source of truth)
 - oauth2_registered_client, oauth2_authorization, oauth2_authorization_consent (timestamp 전부 TIMESTAMPTZ)
+  - openapi-client 등록: grant_type=urn:example:grant-type:api-key, scope=openid/read/write/openapi, self_contained JWT, access_token TTL 1h
 
 
 jwt-server
@@ -258,6 +306,14 @@ jwt-server
 - 이미지 업로드 (MinIO 연동)
 - 알림 (Kafka 이벤트 발행)
 - 신고 기능
+
+Open API (JWT 기반 외부 API)
+- GET /openapi/ping: API 키 인증 확인용 헬스 엔드포인트
+- 인증: authorization-server에서 발급한 JWT (api_key_id + tenant_id 클레임 포함)
+- OpenApiRateLimitFilter (OncePerRequestFilter): JwtClaimsFilter 이후 실행
+  - /openapi/** 경로만 적용
+  - JWT payload에서 api_key_id 추출 → Redis rl:config:{id}에서 burst 조회 → INCR rl:count:{id}:{minuteWindow} → 초과 시 429
+  - Redis 장애 시 fail-open (요청 허용)
 
 Rate Limiting (Redis 토큰 버킷)
 - RedisRateLimiter: StringRedisTemplate + RedisScript<Long>으로 Lua 스크립트 원자적 실행
@@ -398,6 +454,14 @@ Rate Limiting (Redis 토큰 버킷)
 CORS
 - SecurityConfig: CorsConfigurationSource 빈 + OPTIONS /** permitAll
 - allowedOriginPatterns: * (Bearer token 사용으로 allowCredentials 불필요)
+
+Open API (JWT 기반 외부 API)
+- GET /openapi/ping: API 키 인증 확인용 헬스 엔드포인트
+- 이중 필터 체인:
+  - @Order(1) openApiFilterChain: securityMatcher("/openapi/**") → jwt resourceServer (JWT 서명 검증) → OpenApiRateLimitFilter 추가
+  - @Order(2) securityFilterChain: 기존 opaque token 인트로스펙션 체인
+- OpenApiRateLimitFilter: jwt-server와 동일 구현 (JWT payload 파싱 → api_key_id → Redis INCR)
+- application-k8s.yaml: spring.security.oauth2.resourceserver.jwt.issuer-uri: ${AUTH_ISSUER_URI} (OIDC discovery로 JWK 자동 조회, 기동 시 authorization-server 실행 필요)
 
 인증 방식
 - Opaque token → authorization-server /oauth2/introspect 호출
@@ -585,10 +649,11 @@ k8s/gateway/
 - gatewayclass.yaml: Istio GatewayClass (controllerName: istio.io/gateway-controller)
 - gateway.yaml: HTTP(80) + HTTPS(443) 리스너, cert-manager.io/cluster-issuer: letsencrypt-prod
   - hostname: api.example.com (배포 전 실제 도메인으로 교체 필요)
-- httproutes.yaml: HTTP→HTTPS 301 리다이렉트 + 경로별 라우팅 (5초 타임아웃)
-  - /auth → authorization-server:80
-  - /api  → jwt-server:80
-  - /admin, /payments → opaque-server:80
+- httproutes.yaml: HTTP→HTTPS 301 리다이렉트 + 경로별 라우팅
+  - /auth    → authorization-server:80 (타임아웃 5s)
+  - /api     → jwt-server:80 (타임아웃 5s)
+  - /admin, /payments → opaque-server:80 (타임아웃 5s)
+  - /openapi → jwt-server:80 (타임아웃 10s, API 키 기반 외부 공개 API)
 
 k8s/istio/
 - peer-authentication.yaml: mTLS STRICT (평문 접근 차단, 사이드카 없는 호출자 거부)

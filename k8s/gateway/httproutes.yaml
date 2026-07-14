@@ -112,3 +112,27 @@ spec:
           port: 80
       timeouts:
         request: 5s
+---
+# /openapi/** → jwt-server (외부 API 키 기반 접근)
+# 레이트 리미팅: jwt-server 내 OpenApiRateLimitFilter + Redis로 처리
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: openapi-route
+  namespace: msa
+spec:
+  parentRefs:
+    - name: msa-gateway
+      sectionName: https
+  hostnames:
+    - "api.example.com"  # ← 실제 도메인으로 교체
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /openapi
+      backendRefs:
+        - name: jwt-server
+          port: 80
+      timeouts:
+        request: 10s

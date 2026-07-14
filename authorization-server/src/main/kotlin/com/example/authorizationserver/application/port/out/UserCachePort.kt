@@ -4,8 +4,10 @@ import com.example.authorizationserver.domain.user.User
 
 interface UserCachePort {
     fun getUser(username: String): User?
+    fun getUser(username: String, tenantId: Long): User?
     fun saveUser(user: User)
     fun deleteUser(username: String)
+    fun deleteUser(username: String, tenantId: Long)
     fun deleteAuthorities(username: String)
     fun getLoginAttempts(username: String): Int
     fun incrementLoginAttempts(username: String): Int

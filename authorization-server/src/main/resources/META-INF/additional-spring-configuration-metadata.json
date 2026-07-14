@@ -19,6 +19,36 @@
       "name": "management.zipkin.tracing.endpoint",
       "type": "java.lang.String",
       "description": "Description for management.zipkin.tracing.endpoint."
+    },
+    {
+      "name": "spring.kafka.consumer.group-id",
+      "type": "java.lang.String",
+      "description": "Description for spring.kafka.consumer.group-id."
+    },
+    {
+      "name": "spring.kafka.consumer.key-deserializer",
+      "type": "java.lang.String",
+      "description": "Description for spring.kafka.consumer.key-deserializer."
+    },
+    {
+      "name": "spring.kafka.consumer.value-deserializer",
+      "type": "java.lang.String",
+      "description": "Description for spring.kafka.consumer.value-deserializer."
+    },
+    {
+      "name": "spring.kafka.consumer.auto-offset-reset",
+      "type": "java.lang.String",
+      "description": "Description for spring.kafka.consumer.auto-offset-reset."
+    },
+    {
+      "name": "management.otlp.tracing.endpoint",
+      "type": "java.lang.String",
+      "description": "Description for management.otlp.tracing.endpoint."
+    },
+    {
+      "name": "management.tracing.sampling.probability",
+      "type": "java.lang.String",
+      "description": "Description for management.tracing.sampling.probability."
     }
   ]
 }

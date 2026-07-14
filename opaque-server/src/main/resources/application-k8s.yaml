@@ -23,6 +23,8 @@ spring:
           introspection-uri: ${AUTH_ISSUER_URI}/oauth2/introspect
           client-id: opaque-server-client
           client-secret: ${OPAQUE_CLIENT_SECRET}
+        jwt:
+          issuer-uri: ${AUTH_ISSUER_URI}
 
   sql:
     init:

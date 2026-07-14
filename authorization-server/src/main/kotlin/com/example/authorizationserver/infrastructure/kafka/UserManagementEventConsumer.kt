@@ -39,8 +39,11 @@ class UserManagementEventConsumer(
             }
             "RESTORE" -> {
                 userRepository.setStatusAndEnabled(userId, true, "ACTIVE")
-                val username = userRepository.findById(userId)?.username
-                if (username != null) userCachePort.deleteUser(username)
+                val user = userRepository.findById(userId)
+                if (user != null) {
+                    if (user.tenantId != null) userCachePort.deleteUser(user.username, user.tenantId)
+                    else userCachePort.deleteUser(user.username)
+                }
                 log.info("User restored: userId={}", userId)
             }
             else -> log.warn("Unknown user-management action: {}", action)
@@ -48,10 +51,11 @@ class UserManagementEventConsumer(
     }
 
     private fun evictAndRevoke(userId: Long) {
-        val username = userRepository.findById(userId)?.username ?: return
-        userCachePort.deleteAuthorities(username)
-        userCachePort.deleteUser(username)
-        tokenRevocationService.revokeAllForPrincipal(username)
+        val user = userRepository.findById(userId) ?: return
+        userCachePort.deleteAuthorities(user.username)
+        if (user.tenantId != null) userCachePort.deleteUser(user.username, user.tenantId)
+        else userCachePort.deleteUser(user.username)
+        tokenRevocationService.revokeAllForPrincipal(user.username)
     }
 
     @Suppress("UNCHECKED_CAST")

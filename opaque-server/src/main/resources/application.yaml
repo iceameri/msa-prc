@@ -48,6 +48,8 @@ spring:
           introspection-uri: http://localhost:1010/oauth2/introspect
           client-id: opaque-server-client
           client-secret: 1234qwer
+        jwt:
+          issuer-uri: http://localhost:1010
 
 # ── Actuator & Monitoring ─────────────────────────────────
 management:
