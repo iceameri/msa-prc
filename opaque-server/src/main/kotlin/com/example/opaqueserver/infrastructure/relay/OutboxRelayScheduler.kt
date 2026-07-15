@@ -1,6 +1,6 @@
 package com.example.opaqueserver.infrastructure.relay
 
-import com.example.opaqueserver.domain.outbox.OutboxRepository
+import com.example.opaqueserver.infrastructure.persistence.OutboxJdbcRepository
 import org.slf4j.LoggerFactory
 import org.springframework.kafka.core.KafkaTemplate
 import org.springframework.scheduling.annotation.Scheduled
@@ -9,7 +9,7 @@ import java.util.concurrent.TimeUnit
 
 @Component
 class OutboxRelayScheduler(
-    private val outboxRepository: OutboxRepository,
+    private val outboxRepository: OutboxJdbcRepository,
     private val kafkaTemplate: KafkaTemplate<String, String>
 ) {
     private val log = LoggerFactory.getLogger(OutboxRelayScheduler::class.java)

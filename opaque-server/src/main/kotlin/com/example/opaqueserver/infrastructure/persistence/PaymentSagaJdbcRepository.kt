@@ -1,7 +1,6 @@
 package com.example.opaqueserver.infrastructure.persistence
 
 import com.example.opaqueserver.domain.payment.PaymentSaga
-import com.example.opaqueserver.domain.payment.PaymentSagaRepository
 import com.example.opaqueserver.domain.payment.SagaStatus
 import com.example.opaqueserver.domain.payment.SagaStep
 import org.springframework.jdbc.core.JdbcTemplate
@@ -10,14 +9,14 @@ import org.springframework.stereotype.Repository
 import java.sql.ResultSet
 
 @Repository
-class PaymentSagaJdbcRepository(private val jdbcTemplate: JdbcTemplate) : PaymentSagaRepository {
+class PaymentSagaJdbcRepository(private val jdbcTemplate: JdbcTemplate) {
 
-    override fun save(saga: PaymentSaga): PaymentSaga {
+    fun save(saga: PaymentSaga): PaymentSaga {
         val keyHolder = GeneratedKeyHolder()
         jdbcTemplate.update({ con ->
             con.prepareStatement(
                 """
-                |INSERT INTO opaque_db.public.payment_sagas (payment_id, step, status, detail) 
+                |INSERT INTO opaque_db.public.payment_sagas (payment_id, step, status, detail)
                 |VALUES (?, ?, ?, ?)
                 |""".trimMargin(), arrayOf("id")
             ).apply {
@@ -30,7 +29,7 @@ class PaymentSagaJdbcRepository(private val jdbcTemplate: JdbcTemplate) : Paymen
         return saga.copy(id = keyHolder.key!!.toLong())
     }
 
-    override fun findByPaymentId(paymentId: Long): List<PaymentSaga> =
+    fun findByPaymentId(paymentId: Long): List<PaymentSaga> =
         jdbcTemplate.query(
             """
             |SELECT id,

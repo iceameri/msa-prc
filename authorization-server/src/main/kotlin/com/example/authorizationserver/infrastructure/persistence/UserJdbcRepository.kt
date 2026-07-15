@@ -1,7 +1,6 @@
 package com.example.authorizationserver.infrastructure.persistence
 
 import com.example.authorizationserver.domain.user.User
-import com.example.authorizationserver.domain.user.UserRepository
 import com.example.authorizationserver.infrastructure.kafka.UserSyncEventPublisher
 import org.slf4j.LoggerFactory
 import org.springframework.jdbc.core.JdbcTemplate
@@ -16,11 +15,11 @@ import java.time.Instant
 class UserJdbcRepository(
     private val jdbcTemplate: JdbcTemplate,
     private val userSyncEventPublisher: UserSyncEventPublisher
-) : UserRepository {
+) {
 
     private val log = LoggerFactory.getLogger(javaClass)
 
-    override fun findByUsername(username: String): User? =
+    fun findByUsername(username: String): User? =
         jdbcTemplate.query(
             """
             SELECT      u.*, ua.authority
@@ -32,7 +31,7 @@ class UserJdbcRepository(
             username
         )
 
-    override fun findByUsernameAndTenantId(username: String, tenantId: Long): User? =
+    fun findByUsernameAndTenantId(username: String, tenantId: Long): User? =
         jdbcTemplate.query(
             """
             SELECT      u.*, ua.authority
@@ -44,7 +43,7 @@ class UserJdbcRepository(
             username, tenantId
         )
 
-    override fun findById(id: Long): User? =
+    fun findById(id: Long): User? =
         jdbcTemplate.query(
             """
             SELECT      u.*, ua.authority
@@ -56,7 +55,7 @@ class UserJdbcRepository(
             id
         )
 
-    override fun findByEmail(email: String): User? =
+    fun findByEmail(email: String): User? =
         jdbcTemplate.query(
             """
             SELECT      u.*, ua.authority
@@ -69,7 +68,7 @@ class UserJdbcRepository(
         )
 
     @Transactional
-    override fun save(user: User): User {
+    fun save(user: User): User {
         return if (user.id == null) {
             val userId = jdbcTemplate.queryForObject<Long>(
                 """
@@ -106,7 +105,7 @@ class UserJdbcRepository(
         }
     }
 
-    override fun lockUser(username: String, lockedUntil: Instant) {
+    fun lockUser(username: String, lockedUntil: Instant) {
         jdbcTemplate.update(
             """
             UPDATE  authorization_db.public.users
@@ -117,7 +116,7 @@ class UserJdbcRepository(
         )
     }
 
-    override fun resetLoginAttempts(username: String) {
+    fun resetLoginAttempts(username: String) {
         jdbcTemplate.update(
             """
             UPDATE  authorization_db.public.users
@@ -128,7 +127,7 @@ class UserJdbcRepository(
         )
     }
 
-    override fun updateMfaSettings(username: String, mfaEnabled: Boolean, mfaSecret: String?) {
+    fun updateMfaSettings(username: String, mfaEnabled: Boolean, mfaSecret: String?) {
         jdbcTemplate.update(
             """
             UPDATE  authorization_db.public.users
@@ -139,7 +138,7 @@ class UserJdbcRepository(
         )
     }
 
-    override fun setStatusAndEnabled(userId: Long, enabled: Boolean, status: String) {
+    fun setStatusAndEnabled(userId: Long, enabled: Boolean, status: String) {
         val matched = jdbcTemplate.query(
             """
             UPDATE  authorization_db.public.users
@@ -158,7 +157,7 @@ class UserJdbcRepository(
         userSyncEventPublisher.publish(userId, username, tenantId, enabled, status, version)
     }
 
-    override fun updateUsername(userId: Long, newUsername: String) {
+    fun updateUsername(userId: Long, newUsername: String) {
         val newVersion = jdbcTemplate.queryForObject<Long>(
             """
             UPDATE  authorization_db.public.users

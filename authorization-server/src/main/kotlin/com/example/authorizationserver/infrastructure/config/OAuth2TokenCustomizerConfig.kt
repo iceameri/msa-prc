@@ -1,7 +1,7 @@
 package com.example.authorizationserver.infrastructure.config
 
 import com.example.authorizationserver.application.port.out.UserCachePort
-import com.example.authorizationserver.domain.user.UserRepository
+import com.example.authorizationserver.infrastructure.persistence.UserJdbcRepository
 import com.example.authorizationserver.infrastructure.security.TenantAwareUserDetails
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
@@ -16,7 +16,7 @@ private val API_KEY_GRANT_TYPE = AuthorizationGrantType("urn:example:grant-type:
 
 @Configuration
 class OAuth2TokenCustomizerConfig(
-    private val userRepository: UserRepository,
+    private val userRepository: UserJdbcRepository,
     private val userCachePort: UserCachePort
 ) {
 

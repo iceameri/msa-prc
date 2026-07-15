@@ -1,7 +1,6 @@
 package com.example.jwtserver.infrastructure.persistence
 
 import com.example.jwtserver.domain.post.Post
-import com.example.jwtserver.domain.post.PostRepository
 import com.example.jwtserver.domain.post.PostStatus
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.jdbc.support.GeneratedKeyHolder
@@ -10,7 +9,7 @@ import java.sql.ResultSet
 import java.sql.Types
 
 @Repository
-class PostJdbcRepository(private val jdbcTemplate: JdbcTemplate) : PostRepository {
+class PostJdbcRepository(private val jdbcTemplate: JdbcTemplate) {
 
     private val selectBase = """
         SELECT    p.*,
@@ -19,7 +18,7 @@ class PostJdbcRepository(private val jdbcTemplate: JdbcTemplate) : PostRepositor
         LEFT JOIN jwt_db.public.authorization_users u ON p.author_id = u.user_id
         LEFT JOIN jwt_db.public.authorization_system_clients sc ON p.client_id = sc.client_id"""
 
-    override fun findById(id: Long): Post? =
+    fun findById(id: Long): Post? =
         jdbcTemplate.query(
             """
             $selectBase
@@ -29,7 +28,7 @@ class PostJdbcRepository(private val jdbcTemplate: JdbcTemplate) : PostRepositor
             ::mapRow, id
         ).firstOrNull()
 
-    override fun findAll(offset: Int, limit: Int): List<Post> =
+    fun findAll(offset: Int, limit: Int): List<Post> =
         jdbcTemplate.query(
             """
             $selectBase
@@ -40,7 +39,7 @@ class PostJdbcRepository(private val jdbcTemplate: JdbcTemplate) : PostRepositor
             ::mapRow, limit, offset
         )
 
-    override fun findByAuthorId(authorId: Long, offset: Int, limit: Int): List<Post> =
+    fun findByAuthorId(authorId: Long, offset: Int, limit: Int): List<Post> =
         jdbcTemplate.query(
             """
             $selectBase
@@ -52,7 +51,7 @@ class PostJdbcRepository(private val jdbcTemplate: JdbcTemplate) : PostRepositor
             ::mapRow, authorId, limit, offset
         )
 
-    override fun findFeedPosts(followingIds: List<Long>, offset: Int, limit: Int): List<Post> {
+    fun findFeedPosts(followingIds: List<Long>, offset: Int, limit: Int): List<Post> {
         val placeholders = followingIds.joinToString(",") { "?" }
         val args: Array<Any> = (followingIds.map { it as Any } + limit + offset).toTypedArray()
         return jdbcTemplate.query(
@@ -66,7 +65,7 @@ class PostJdbcRepository(private val jdbcTemplate: JdbcTemplate) : PostRepositor
         )
     }
 
-    override fun findByHashtag(hashtagName: String, offset: Int, limit: Int): List<Post> =
+    fun findByHashtag(hashtagName: String, offset: Int, limit: Int): List<Post> =
         jdbcTemplate.query(
             """
             $selectBase
@@ -78,7 +77,7 @@ class PostJdbcRepository(private val jdbcTemplate: JdbcTemplate) : PostRepositor
             ::mapRow, hashtagName, limit, offset
         )
 
-    override fun save(post: Post): Post {
+    fun save(post: Post): Post {
         val keyHolder = GeneratedKeyHolder()
         jdbcTemplate.update({ con ->
             con.prepareStatement(
@@ -98,7 +97,7 @@ class PostJdbcRepository(private val jdbcTemplate: JdbcTemplate) : PostRepositor
         return post.copy(id = keyHolder.key!!.toLong())
     }
 
-    override fun update(post: Post) {
+    fun update(post: Post) {
         jdbcTemplate.update(
             """
             UPDATE  jwt_db.public.posts
@@ -109,7 +108,7 @@ class PostJdbcRepository(private val jdbcTemplate: JdbcTemplate) : PostRepositor
         )
     }
 
-    override fun delete(id: Long) {
+    fun delete(id: Long) {
         jdbcTemplate.update(
             """
             UPDATE  jwt_db.public.posts
@@ -120,7 +119,7 @@ class PostJdbcRepository(private val jdbcTemplate: JdbcTemplate) : PostRepositor
         )
     }
 
-    override fun incrementLikeCount(id: Long) {
+    fun incrementLikeCount(id: Long) {
         jdbcTemplate.update(
             """
             UPDATE  jwt_db.public.posts
@@ -131,7 +130,7 @@ class PostJdbcRepository(private val jdbcTemplate: JdbcTemplate) : PostRepositor
         )
     }
 
-    override fun decrementLikeCount(id: Long) {
+    fun decrementLikeCount(id: Long) {
         jdbcTemplate.update(
             """
             UPDATE  jwt_db.public.posts
@@ -142,7 +141,7 @@ class PostJdbcRepository(private val jdbcTemplate: JdbcTemplate) : PostRepositor
         )
     }
 
-    override fun incrementCommentCount(id: Long) {
+    fun incrementCommentCount(id: Long) {
         jdbcTemplate.update(
             """
             UPDATE  jwt_db.public.posts
@@ -153,7 +152,7 @@ class PostJdbcRepository(private val jdbcTemplate: JdbcTemplate) : PostRepositor
         )
     }
 
-    override fun decrementCommentCount(id: Long) {
+    fun decrementCommentCount(id: Long) {
         jdbcTemplate.update(
             """
             UPDATE  jwt_db.public.posts

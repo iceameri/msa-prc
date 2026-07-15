@@ -1,7 +1,7 @@
 package com.example.authorizationserver.application.service
 
 import com.example.authorizationserver.application.port.out.UserCachePort
-import com.example.authorizationserver.domain.user.UserRepository
+import com.example.authorizationserver.infrastructure.persistence.UserJdbcRepository
 import org.springframework.stereotype.Service
 import java.time.Duration
 import java.time.Instant
@@ -9,7 +9,7 @@ import java.time.Instant
 @Service
 class LoginAttemptService(
     private val userCachePort: UserCachePort,
-    private val userRepository: UserRepository
+    private val userRepository: UserJdbcRepository
 ) {
     companion object {
         const val MAX_ATTEMPTS = 5

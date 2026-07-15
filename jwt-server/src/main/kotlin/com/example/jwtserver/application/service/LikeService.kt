@@ -3,15 +3,15 @@ package com.example.jwtserver.application.service
 import com.example.jwtserver.application.port.out.OutboxRepository
 import com.example.jwtserver.domain.event.OutboxEvent
 import com.example.jwtserver.domain.like.Like
-import com.example.jwtserver.domain.like.LikeRepository
-import com.example.jwtserver.domain.post.PostRepository
+import com.example.jwtserver.infrastructure.persistence.LikeJdbcRepository
+import com.example.jwtserver.infrastructure.persistence.PostJdbcRepository
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 
 @Service
 class LikeService(
-    private val likeRepository: LikeRepository,
-    private val postRepository: PostRepository,
+    private val likeRepository: LikeJdbcRepository,
+    private val postRepository: PostJdbcRepository,
     private val userSyncService: UserSyncService,
     private val outboxRepository: OutboxRepository
 ) {

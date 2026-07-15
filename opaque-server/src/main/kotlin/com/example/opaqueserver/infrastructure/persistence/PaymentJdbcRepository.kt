@@ -1,7 +1,6 @@
 package com.example.opaqueserver.infrastructure.persistence
 
 import com.example.opaqueserver.domain.payment.Payment
-import com.example.opaqueserver.domain.payment.PaymentRepository
 import com.example.opaqueserver.domain.payment.PaymentStatus
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.jdbc.core.queryForObject
@@ -11,9 +10,9 @@ import java.math.BigDecimal
 import java.sql.ResultSet
 
 @Repository
-class PaymentJdbcRepository(private val jdbcTemplate: JdbcTemplate) : PaymentRepository {
+class PaymentJdbcRepository(private val jdbcTemplate: JdbcTemplate) {
 
-    override fun findById(id: Long): Payment? =
+    fun findById(id: Long): Payment? =
         jdbcTemplate.query(
             """
             SELECT  id,
@@ -29,7 +28,7 @@ class PaymentJdbcRepository(private val jdbcTemplate: JdbcTemplate) : PaymentRep
             ::mapRow, id
         ).firstOrNull()
 
-    override fun findByOrderId(orderId: String): Payment? =
+    fun findByOrderId(orderId: String): Payment? =
         jdbcTemplate.query(
             """
             SELECT  id,
@@ -45,7 +44,7 @@ class PaymentJdbcRepository(private val jdbcTemplate: JdbcTemplate) : PaymentRep
             ::mapRow, orderId
         ).firstOrNull()
 
-    override fun findByIdAndUserId(id: Long, userId: Long): Payment? =
+    fun findByIdAndUserId(id: Long, userId: Long): Payment? =
         jdbcTemplate.query(
             """
             SELECT  id,
@@ -61,7 +60,7 @@ class PaymentJdbcRepository(private val jdbcTemplate: JdbcTemplate) : PaymentRep
             ::mapRow, id, userId
         ).firstOrNull()
 
-    override fun findByUserId(userId: Long): List<Payment> =
+    fun findByUserId(userId: Long): List<Payment> =
         jdbcTemplate.query(
             """
             SELECT  id,
@@ -78,7 +77,7 @@ class PaymentJdbcRepository(private val jdbcTemplate: JdbcTemplate) : PaymentRep
             ::mapRow, userId
         )
 
-    override fun save(payment: Payment): Payment {
+    fun save(payment: Payment): Payment {
         val keyHolder = GeneratedKeyHolder()
         jdbcTemplate.update({ con ->
             con.prepareStatement(
@@ -97,7 +96,7 @@ class PaymentJdbcRepository(private val jdbcTemplate: JdbcTemplate) : PaymentRep
         return payment.copy(id = keyHolder.key!!.toLong())
     }
 
-    override fun updateStatus(id: Long, status: PaymentStatus) {
+    fun updateStatus(id: Long, status: PaymentStatus) {
         jdbcTemplate.update(
             """
             UPDATE  opaque_db.public.payments
@@ -108,7 +107,7 @@ class PaymentJdbcRepository(private val jdbcTemplate: JdbcTemplate) : PaymentRep
         )
     }
 
-    override fun sumCompletedAmount(): BigDecimal =
+    fun sumCompletedAmount(): BigDecimal =
         jdbcTemplate.queryForObject<BigDecimal>(
             """
             SELECT  COALESCE(SUM(amount), 0)

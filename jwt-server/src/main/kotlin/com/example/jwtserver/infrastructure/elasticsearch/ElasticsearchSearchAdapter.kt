@@ -3,7 +3,7 @@ package com.example.jwtserver.infrastructure.elasticsearch
 import co.elastic.clients.elasticsearch._types.query_dsl.Query
 import com.example.jwtserver.application.port.out.SearchPort
 import com.example.jwtserver.domain.post.Post
-import com.example.jwtserver.domain.user.UserRepository
+import com.example.jwtserver.infrastructure.persistence.UserJdbcRepository
 import org.springframework.data.elasticsearch.NoSuchIndexException
 import org.springframework.data.elasticsearch.client.elc.NativeQuery
 import org.springframework.data.elasticsearch.core.ElasticsearchOperations
@@ -16,7 +16,7 @@ import org.springframework.stereotype.Component
 @Component
 class ElasticsearchSearchAdapter(
     private val elasticsearchOperations: ElasticsearchOperations,
-    private val userRepository: UserRepository
+    private val userRepository: UserJdbcRepository
 ) : SearchPort {
 
     private val postIndex = of("posts")

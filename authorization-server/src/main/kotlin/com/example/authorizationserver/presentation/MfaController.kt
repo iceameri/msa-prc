@@ -4,7 +4,7 @@ import com.example.authorizationserver.application.port.out.UserCachePort
 import com.example.authorizationserver.application.service.LoginAttemptService
 import com.example.authorizationserver.application.service.MfaService
 import com.example.authorizationserver.application.service.UserDetailsServiceImpl
-import com.example.authorizationserver.domain.user.UserRepository
+import com.example.authorizationserver.infrastructure.persistence.UserJdbcRepository
 import com.example.authorizationserver.presentation.dto.MfaCodeRequest
 import com.example.authorizationserver.presentation.dto.MfaSetupResponse
 import jakarta.servlet.http.HttpServletRequest
@@ -20,7 +20,7 @@ import org.springframework.web.bind.annotation.*
 @RequestMapping("/mfa")
 class MfaController(
     private val mfaService: MfaService,
-    private val userRepository: UserRepository,
+    private val userRepository: UserJdbcRepository,
     private val userDetailsService: UserDetailsServiceImpl,
     private val loginAttemptService: LoginAttemptService,
     private val userCachePort: UserCachePort

@@ -1,13 +1,12 @@
 package com.example.authorizationserver.infrastructure.persistence
 
-import com.example.authorizationserver.domain.user.UserActivityRepository
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Repository
 
 @Repository
-class UserActivityJdbcRepository(private val jdbcTemplate: JdbcTemplate) : UserActivityRepository {
+class UserActivityJdbcRepository(private val jdbcTemplate: JdbcTemplate) {
 
-    override fun upsert(userId: Long) {
+    fun upsert(userId: Long) {
         jdbcTemplate.update(
             """
             INSERT INTO authorization_db.public.user_activity (user_id, last_active_at)

@@ -1,16 +1,15 @@
 package com.example.jwtserver.infrastructure.persistence
 
 import com.example.jwtserver.domain.follow.Follow
-import com.example.jwtserver.domain.follow.FollowRepository
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.jdbc.core.queryForList
 import org.springframework.jdbc.core.queryForObject
 import org.springframework.stereotype.Repository
 
 @Repository
-class FollowJdbcRepository(private val jdbcTemplate: JdbcTemplate) : FollowRepository {
+class FollowJdbcRepository(private val jdbcTemplate: JdbcTemplate) {
 
-    override fun exists(followerId: Long, followingId: Long): Boolean =
+    fun exists(followerId: Long, followingId: Long): Boolean =
         (jdbcTemplate.queryForObject<Int>(
             """
             SELECT  COUNT(*)
@@ -20,7 +19,7 @@ class FollowJdbcRepository(private val jdbcTemplate: JdbcTemplate) : FollowRepos
             followerId, followingId
         ) ?: 0) > 0
 
-    override fun save(follow: Follow) {
+    fun save(follow: Follow) {
         jdbcTemplate.update(
             """
             INSERT INTO jwt_db.public.follows (follower_id, following_id)
@@ -30,7 +29,7 @@ class FollowJdbcRepository(private val jdbcTemplate: JdbcTemplate) : FollowRepos
         )
     }
 
-    override fun delete(followerId: Long, followingId: Long) {
+    fun delete(followerId: Long, followingId: Long) {
         jdbcTemplate.update(
             """
             DELETE FROM jwt_db.public.follows
@@ -40,7 +39,7 @@ class FollowJdbcRepository(private val jdbcTemplate: JdbcTemplate) : FollowRepos
         )
     }
 
-    override fun findFollowingIds(followerId: Long): List<Long> =
+    fun findFollowingIds(followerId: Long): List<Long> =
         jdbcTemplate.queryForList<Long>(
             """
             SELECT  following_id
@@ -50,7 +49,7 @@ class FollowJdbcRepository(private val jdbcTemplate: JdbcTemplate) : FollowRepos
             followerId
         ).filterNotNull()
 
-    override fun countFollowers(userId: Long): Int =
+    fun countFollowers(userId: Long): Int =
         jdbcTemplate.queryForObject<Int>(
             """
             SELECT  COUNT(*)
@@ -60,7 +59,7 @@ class FollowJdbcRepository(private val jdbcTemplate: JdbcTemplate) : FollowRepos
             userId
         ) ?: 0
 
-    override fun countFollowing(userId: Long): Int =
+    fun countFollowing(userId: Long): Int =
         jdbcTemplate.queryForObject<Int>(
             """
             SELECT  COUNT(*)

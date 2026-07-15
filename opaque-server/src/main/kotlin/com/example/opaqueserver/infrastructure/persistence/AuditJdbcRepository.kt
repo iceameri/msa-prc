@@ -1,15 +1,14 @@
 package com.example.opaqueserver.infrastructure.persistence
 
 import com.example.opaqueserver.domain.audit.AuditLog
-import com.example.opaqueserver.domain.audit.AuditRepository
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Repository
 import java.sql.ResultSet
 
 @Repository
-class AuditJdbcRepository(private val jdbcTemplate: JdbcTemplate) : AuditRepository {
+class AuditJdbcRepository(private val jdbcTemplate: JdbcTemplate) {
 
-    override fun save(log: AuditLog) {
+    fun save(log: AuditLog) {
         jdbcTemplate.update(
             """
             INSERT INTO opaque_db.public.audit_logs
@@ -20,7 +19,7 @@ class AuditJdbcRepository(private val jdbcTemplate: JdbcTemplate) : AuditReposit
         )
     }
 
-    override fun findAll(offset: Int, limit: Int): List<AuditLog> =
+    fun findAll(offset: Int, limit: Int): List<AuditLog> =
         jdbcTemplate.query(
             """
             SELECT  id,

@@ -3,9 +3,9 @@ package com.example.jwtserver.application.service
 import com.example.jwtserver.application.port.out.OutboxRepository
 import com.example.jwtserver.application.port.out.SearchPort
 import com.example.jwtserver.domain.event.OutboxEvent
-import com.example.jwtserver.domain.hashtag.HashtagRepository
 import com.example.jwtserver.domain.post.Post
-import com.example.jwtserver.domain.post.PostRepository
+import com.example.jwtserver.infrastructure.persistence.HashtagJdbcRepository
+import com.example.jwtserver.infrastructure.persistence.PostJdbcRepository
 import com.example.jwtserver.infrastructure.security.AuthenticatedClient
 import com.example.jwtserver.infrastructure.security.AuthenticatedUser
 import com.example.jwtserver.infrastructure.security.CallerPrincipal
@@ -14,8 +14,8 @@ import org.springframework.transaction.annotation.Transactional
 
 @Service
 class PostService(
-    private val postRepository: PostRepository,
-    private val hashtagRepository: HashtagRepository,
+    private val postRepository: PostJdbcRepository,
+    private val hashtagRepository: HashtagJdbcRepository,
     private val userSyncService: UserSyncService,
     private val searchPort: SearchPort,
     private val outboxRepository: OutboxRepository

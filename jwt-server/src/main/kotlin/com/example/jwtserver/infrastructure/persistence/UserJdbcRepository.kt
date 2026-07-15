@@ -1,15 +1,14 @@
 package com.example.jwtserver.infrastructure.persistence
 
 import com.example.jwtserver.domain.user.User
-import com.example.jwtserver.domain.user.UserRepository
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Repository
 import java.sql.ResultSet
 
 @Repository
-class UserJdbcRepository(private val jdbcTemplate: JdbcTemplate) : UserRepository {
+class UserJdbcRepository(private val jdbcTemplate: JdbcTemplate) {
 
-    override fun findById(id: Long): User? =
+    fun findById(id: Long): User? =
         jdbcTemplate.query(
             """
             SELECT  user_id,
@@ -25,7 +24,7 @@ class UserJdbcRepository(private val jdbcTemplate: JdbcTemplate) : UserRepositor
             ::mapRow, id
         ).firstOrNull()
 
-    override fun findByUsername(username: String): User? =
+    fun findByUsername(username: String): User? =
         jdbcTemplate.query(
             """
             SELECT  user_id,
@@ -41,7 +40,7 @@ class UserJdbcRepository(private val jdbcTemplate: JdbcTemplate) : UserRepositor
             ::mapRow, username
         ).firstOrNull()
 
-    override fun sync(userId: Long, username: String, enabled: Boolean, status: String, version: Long) {
+    fun sync(userId: Long, username: String, enabled: Boolean, status: String, version: Long) {
         jdbcTemplate.update(
             """
             INSERT INTO jwt_db.public.authorization_users (user_id, username, enabled, status, version)
@@ -59,7 +58,7 @@ class UserJdbcRepository(private val jdbcTemplate: JdbcTemplate) : UserRepositor
     }
 
     // username 변경 전용 — enabled/status는 현재 값 유지
-    override fun syncUsername(userId: Long, newUsername: String, version: Long) {
+    fun syncUsername(userId: Long, newUsername: String, version: Long) {
         jdbcTemplate.update(
             """
             INSERT INTO jwt_db.public.authorization_users (user_id, username, enabled, status, version)

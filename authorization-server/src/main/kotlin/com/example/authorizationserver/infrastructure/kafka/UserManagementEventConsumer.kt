@@ -1,8 +1,8 @@
 package com.example.authorizationserver.infrastructure.kafka
 
 import com.example.authorizationserver.application.port.out.UserCachePort
-import com.example.authorizationserver.domain.user.UserRepository
 import com.example.authorizationserver.infrastructure.oauth2.TokenRevocationService
+import com.example.authorizationserver.infrastructure.persistence.UserJdbcRepository
 import org.slf4j.LoggerFactory
 import org.springframework.kafka.annotation.KafkaListener
 import org.springframework.stereotype.Component
@@ -10,7 +10,7 @@ import tools.jackson.databind.ObjectMapper
 
 @Component
 class UserManagementEventConsumer(
-    private val userRepository: UserRepository,
+    private val userRepository: UserJdbcRepository,
     private val userCachePort: UserCachePort,
     private val objectMapper: ObjectMapper,
     private val tokenRevocationService: TokenRevocationService

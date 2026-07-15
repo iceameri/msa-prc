@@ -2,14 +2,16 @@ package com.example.opaqueserver.application.service
 
 import com.example.opaqueserver.application.port.out.EventPublishPort
 import com.example.opaqueserver.domain.payment.*
+import com.example.opaqueserver.infrastructure.persistence.PaymentJdbcRepository
+import com.example.opaqueserver.infrastructure.persistence.PaymentSagaJdbcRepository
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.math.BigDecimal
 
 @Service
 class PaymentService(
-    private val paymentRepository: PaymentRepository,
-    private val paymentSagaRepository: PaymentSagaRepository,
+    private val paymentRepository: PaymentJdbcRepository,
+    private val paymentSagaRepository: PaymentSagaJdbcRepository,
     private val auditService: AuditService,
     private val eventPublishPort: EventPublishPort
 ) {

@@ -2,7 +2,7 @@ package com.example.authorizationserver.infrastructure.security
 
 import com.example.authorizationserver.application.port.out.UserCachePort
 import com.example.authorizationserver.application.service.LoginAttemptService
-import com.example.authorizationserver.domain.user.UserRepository
+import com.example.authorizationserver.infrastructure.persistence.UserJdbcRepository
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
 import org.springframework.security.core.Authentication
@@ -14,7 +14,7 @@ import org.springframework.stereotype.Component
 class LoginSuccessHandler(
     private val loginAttemptService: LoginAttemptService,
     private val userCachePort: UserCachePort,
-    private val userRepository: UserRepository
+    private val userRepository: UserJdbcRepository
 ) : SavedRequestAwareAuthenticationSuccessHandler() {
 
     override fun onAuthenticationSuccess(

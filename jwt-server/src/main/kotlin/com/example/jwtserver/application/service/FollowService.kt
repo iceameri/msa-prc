@@ -3,13 +3,13 @@ package com.example.jwtserver.application.service
 import com.example.jwtserver.application.port.out.OutboxRepository
 import com.example.jwtserver.domain.event.OutboxEvent
 import com.example.jwtserver.domain.follow.Follow
-import com.example.jwtserver.domain.follow.FollowRepository
+import com.example.jwtserver.infrastructure.persistence.FollowJdbcRepository
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 
 @Service
 class FollowService(
-    private val followRepository: FollowRepository,
+    private val followRepository: FollowJdbcRepository,
     private val userSyncService: UserSyncService,
     private val outboxRepository: OutboxRepository
 ) {

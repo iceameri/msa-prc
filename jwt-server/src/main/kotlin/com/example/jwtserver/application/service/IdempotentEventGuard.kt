@@ -1,13 +1,13 @@
 package com.example.jwtserver.application.service
 
-import com.example.jwtserver.domain.event.ProcessedEventRepository
+import com.example.jwtserver.infrastructure.persistence.ProcessedEventJdbcRepository
 import org.slf4j.LoggerFactory
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 
 @Service
-class IdempotentEventGuard(private val processedEventRepository: ProcessedEventRepository) {
+class IdempotentEventGuard(private val processedEventRepository: ProcessedEventJdbcRepository) {
 
     private val log = LoggerFactory.getLogger(javaClass)
 

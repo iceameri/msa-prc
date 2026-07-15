@@ -1,7 +1,6 @@
 package com.example.jwtserver.infrastructure.persistence
 
 import com.example.jwtserver.domain.comment.Comment
-import com.example.jwtserver.domain.comment.CommentRepository
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.jdbc.support.GeneratedKeyHolder
 import org.springframework.stereotype.Repository
@@ -9,7 +8,7 @@ import java.sql.ResultSet
 import java.sql.Types
 
 @Repository
-class CommentJdbcRepository(private val jdbcTemplate: JdbcTemplate) : CommentRepository {
+class CommentJdbcRepository(private val jdbcTemplate: JdbcTemplate) {
 
     private val selectBase = """
         SELECT    c.id,
@@ -24,7 +23,7 @@ class CommentJdbcRepository(private val jdbcTemplate: JdbcTemplate) : CommentRep
         LEFT JOIN jwt_db.public.authorization_users u ON c.author_id = u.user_id
         LEFT JOIN jwt_db.public.authorization_system_clients sc ON c.client_id = sc.client_id"""
 
-    override fun findById(id: Long): Comment? =
+    fun findById(id: Long): Comment? =
         jdbcTemplate.query(
             """
             $selectBase
@@ -33,7 +32,7 @@ class CommentJdbcRepository(private val jdbcTemplate: JdbcTemplate) : CommentRep
             ::mapRow, id
         ).firstOrNull()
 
-    override fun findByPostId(postId: Long, offset: Int, limit: Int): List<Comment> =
+    fun findByPostId(postId: Long, offset: Int, limit: Int): List<Comment> =
         jdbcTemplate.query(
             """
             $selectBase
@@ -43,7 +42,7 @@ class CommentJdbcRepository(private val jdbcTemplate: JdbcTemplate) : CommentRep
             ::mapRow, postId, limit, offset
         )
 
-    override fun save(comment: Comment): Comment {
+    fun save(comment: Comment): Comment {
         val keyHolder = GeneratedKeyHolder()
         jdbcTemplate.update({ con ->
             con.prepareStatement(
@@ -63,7 +62,7 @@ class CommentJdbcRepository(private val jdbcTemplate: JdbcTemplate) : CommentRep
         return comment.copy(id = keyHolder.key!!.toLong())
     }
 
-    override fun update(comment: Comment) {
+    fun update(comment: Comment) {
         jdbcTemplate.update(
             """
             UPDATE  jwt_db.public.comments
@@ -74,7 +73,7 @@ class CommentJdbcRepository(private val jdbcTemplate: JdbcTemplate) : CommentRep
         )
     }
 
-    override fun delete(id: Long) {
+    fun delete(id: Long) {
         jdbcTemplate.update(
             """
             DELETE FROM jwt_db.public.comments

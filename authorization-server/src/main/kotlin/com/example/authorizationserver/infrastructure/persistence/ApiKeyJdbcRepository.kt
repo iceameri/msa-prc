@@ -1,7 +1,6 @@
 package com.example.authorizationserver.infrastructure.persistence
 
 import com.example.authorizationserver.domain.apikey.ApiKey
-import com.example.authorizationserver.domain.apikey.ApiKeyRepository
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.jdbc.core.queryForObject
 import org.springframework.stereotype.Repository
@@ -9,22 +8,22 @@ import java.sql.Timestamp
 import java.time.Instant
 
 @Repository
-class ApiKeyJdbcRepository(private val jdbcTemplate: JdbcTemplate) : ApiKeyRepository {
+class ApiKeyJdbcRepository(private val jdbcTemplate: JdbcTemplate) {
 
-    override fun findByKeyHash(keyHash: String): ApiKey? =
+    fun findByKeyHash(keyHash: String): ApiKey? =
         jdbcTemplate.query(
             """
-            SELECT  id,                
-                    tenant_id,         
-                    key_hash,          
-                    key_prefix,        
-                    name,              
-                    status,            
-                    rate_limit_burst,  
-                    rate_limit_refill ,
-                    created_at,        
-                    expires_at,        
-                    last_used_at 
+            SELECT  id,
+                    tenant_id,
+                    key_hash,
+                    key_prefix,
+                    name,
+                    status,
+                    rate_limit_burst,
+                    rate_limit_refill,
+                    created_at,
+                    expires_at,
+                    last_used_at
             FROM    authorization_db.public.api_keys
             WHERE   key_hash = ?
             """.trimMargin(),
@@ -32,20 +31,20 @@ class ApiKeyJdbcRepository(private val jdbcTemplate: JdbcTemplate) : ApiKeyRepos
             keyHash
         ).firstOrNull()
 
-    override fun findById(id: Long): ApiKey? =
+    fun findById(id: Long): ApiKey? =
         jdbcTemplate.query(
             """
-            |SELECT id,                
-                    tenant_id,         
-                    key_hash,          
-                    key_prefix,        
-                    name,              
-                    status,            
-                    rate_limit_burst,  
-                    rate_limit_refill ,
-                    created_at,        
-                    expires_at,        
-                    last_used_at      
+            |SELECT id,
+                    tenant_id,
+                    key_hash,
+                    key_prefix,
+                    name,
+                    status,
+                    rate_limit_burst,
+                    rate_limit_refill,
+                    created_at,
+                    expires_at,
+                    last_used_at
             |FROM   authorization_db.public.api_keys
             |WHERE  id = ?
             |""".trimMargin(),
@@ -53,20 +52,20 @@ class ApiKeyJdbcRepository(private val jdbcTemplate: JdbcTemplate) : ApiKeyRepos
             id
         ).firstOrNull()
 
-    override fun findByTenantId(tenantId: Long): List<ApiKey> =
+    fun findByTenantId(tenantId: Long): List<ApiKey> =
         jdbcTemplate.query(
             """
-            |SELECT id,                
-                    tenant_id,         
-                    key_hash,          
-                    key_prefix,        
-                    name,              
-                    status,            
-                    rate_limit_burst,  
-                    rate_limit_refill ,
-                    created_at,        
-                    expires_at,        
-                    last_used_at 
+            |SELECT id,
+                    tenant_id,
+                    key_hash,
+                    key_prefix,
+                    name,
+                    status,
+                    rate_limit_burst,
+                    rate_limit_refill,
+                    created_at,
+                    expires_at,
+                    last_used_at
             |FROM   authorization_db.public.api_keys
             |WHERE  tenant_id = ?
             |ORDER BY created_at DESC
@@ -75,7 +74,7 @@ class ApiKeyJdbcRepository(private val jdbcTemplate: JdbcTemplate) : ApiKeyRepos
             tenantId
         )
 
-    override fun save(apiKey: ApiKey): ApiKey {
+    fun save(apiKey: ApiKey): ApiKey {
         val id = jdbcTemplate.queryForObject<Long>(
             """
             INSERT INTO authorization_db.public.api_keys
@@ -90,7 +89,7 @@ class ApiKeyJdbcRepository(private val jdbcTemplate: JdbcTemplate) : ApiKeyRepos
         return apiKey.copy(id = id)
     }
 
-    override fun updateStatus(id: Long, status: String) {
+    fun updateStatus(id: Long, status: String) {
         jdbcTemplate.update(
             """
             |UPDATE authorization_db.public.api_keys
@@ -100,7 +99,7 @@ class ApiKeyJdbcRepository(private val jdbcTemplate: JdbcTemplate) : ApiKeyRepos
         )
     }
 
-    override fun updateLastUsedAt(id: Long) {
+    fun updateLastUsedAt(id: Long) {
         jdbcTemplate.update(
             """
             |UPDATE authorization_db.public.api_keys

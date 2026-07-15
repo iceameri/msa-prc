@@ -1,7 +1,6 @@
 package com.example.opaqueserver.infrastructure.persistence
 
 import com.example.opaqueserver.domain.report.Report
-import com.example.opaqueserver.domain.report.ReportRepository
 import com.example.opaqueserver.domain.report.ReportStatus
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.jdbc.core.queryForObject
@@ -10,12 +9,12 @@ import org.springframework.stereotype.Repository
 import java.sql.ResultSet
 
 @Repository
-class ReportJdbcRepository(private val jdbcTemplate: JdbcTemplate) : ReportRepository {
+class ReportJdbcRepository(private val jdbcTemplate: JdbcTemplate) {
 
-    override fun findById(id: Long): Report? =
+    fun findById(id: Long): Report? =
         jdbcTemplate.query("SELECT * FROM opaque_db.public.reports WHERE id = ?", ::mapRow, id).firstOrNull()
 
-    override fun findByStatus(status: ReportStatus, offset: Int, limit: Int): List<Report> =
+    fun findByStatus(status: ReportStatus, offset: Int, limit: Int): List<Report> =
         jdbcTemplate.query(
             """
             SELECT  id,
@@ -30,13 +29,13 @@ class ReportJdbcRepository(private val jdbcTemplate: JdbcTemplate) : ReportRepos
                     created_at
             FROM    opaque_db.public.reports
             WHERE   status = ?
-            ORDER BY created_at 
+            ORDER BY created_at
             LIMIT ? OFFSET ?
             """.trimMargin(),
             ::mapRow, status.name, limit, offset
         )
 
-    override fun existsByExternalId(externalId: Long): Boolean =
+    fun existsByExternalId(externalId: Long): Boolean =
         (jdbcTemplate.queryForObject<Int>(
             """
             SELECT  COUNT(*)
@@ -46,7 +45,7 @@ class ReportJdbcRepository(private val jdbcTemplate: JdbcTemplate) : ReportRepos
             externalId
         ) ?: 0) > 0
 
-    override fun save(report: Report): Report {
+    fun save(report: Report): Report {
         val keyHolder = GeneratedKeyHolder()
         jdbcTemplate.update({ con ->
             con.prepareStatement(
@@ -66,7 +65,7 @@ class ReportJdbcRepository(private val jdbcTemplate: JdbcTemplate) : ReportRepos
         return report.copy(id = keyHolder.key!!.toLong())
     }
 
-    override fun updateStatus(id: Long, status: ReportStatus, reviewedBy: String) {
+    fun updateStatus(id: Long, status: ReportStatus, reviewedBy: String) {
         jdbcTemplate.update(
             """
             UPDATE  opaque_db.public.reports
@@ -79,7 +78,7 @@ class ReportJdbcRepository(private val jdbcTemplate: JdbcTemplate) : ReportRepos
         )
     }
 
-    override fun countByStatus(status: ReportStatus): Int =
+    fun countByStatus(status: ReportStatus): Int =
         jdbcTemplate.queryForObject<Int>(
             """
             SELECT  COUNT(*)

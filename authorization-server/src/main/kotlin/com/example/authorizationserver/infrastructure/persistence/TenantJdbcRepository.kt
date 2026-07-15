@@ -1,15 +1,14 @@
 package com.example.authorizationserver.infrastructure.persistence
 
 import com.example.authorizationserver.domain.tenant.Tenant
-import com.example.authorizationserver.domain.tenant.TenantRepository
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.jdbc.core.queryForObject
 import org.springframework.stereotype.Repository
 
 @Repository
-class TenantJdbcRepository(private val jdbcTemplate: JdbcTemplate) : TenantRepository {
+class TenantJdbcRepository(private val jdbcTemplate: JdbcTemplate) {
 
-    override fun findBySlug(slug: String): Tenant? =
+    fun findBySlug(slug: String): Tenant? =
         jdbcTemplate.query(
             """
             |SELECT id,
@@ -24,7 +23,7 @@ class TenantJdbcRepository(private val jdbcTemplate: JdbcTemplate) : TenantRepos
             slug
         ).firstOrNull()
 
-    override fun findById(id: Long): Tenant? =
+    fun findById(id: Long): Tenant? =
         jdbcTemplate.query(
             """
             |SELECT id,
@@ -39,7 +38,7 @@ class TenantJdbcRepository(private val jdbcTemplate: JdbcTemplate) : TenantRepos
             id
         ).firstOrNull()
 
-    override fun save(tenant: Tenant): Tenant {
+    fun save(tenant: Tenant): Tenant {
         val id = jdbcTemplate.queryForObject<Long>(
             """
             INSERT INTO authorization_db.public.tenants (name, slug, status)

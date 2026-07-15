@@ -1,16 +1,15 @@
 package com.example.jwtserver.infrastructure.persistence
 
 import com.example.jwtserver.domain.hashtag.Hashtag
-import com.example.jwtserver.domain.hashtag.HashtagRepository
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.jdbc.support.GeneratedKeyHolder
 import org.springframework.stereotype.Repository
 import java.sql.ResultSet
 
 @Repository
-class HashtagJdbcRepository(private val jdbcTemplate: JdbcTemplate) : HashtagRepository {
+class HashtagJdbcRepository(private val jdbcTemplate: JdbcTemplate) {
 
-    override fun findByName(name: String): Hashtag? =
+    fun findByName(name: String): Hashtag? =
         jdbcTemplate.query(
             """
             SELECT  id, name
@@ -20,7 +19,7 @@ class HashtagJdbcRepository(private val jdbcTemplate: JdbcTemplate) : HashtagRep
             ::mapRow, name
         ).firstOrNull()
 
-    override fun findByPostId(postId: Long): List<Hashtag> =
+    fun findByPostId(postId: Long): List<Hashtag> =
         jdbcTemplate.query(
             """
             SELECT  h.id, h.name
@@ -31,7 +30,7 @@ class HashtagJdbcRepository(private val jdbcTemplate: JdbcTemplate) : HashtagRep
             ::mapRow, postId
         )
 
-    override fun findOrCreate(name: String): Hashtag {
+    fun findOrCreate(name: String): Hashtag {
         val lower = name.lowercase()
         return findByName(lower) ?: run {
             val keyHolder = GeneratedKeyHolder()
@@ -48,7 +47,7 @@ class HashtagJdbcRepository(private val jdbcTemplate: JdbcTemplate) : HashtagRep
         }
     }
 
-    override fun linkToPost(postId: Long, hashtagId: Long) {
+    fun linkToPost(postId: Long, hashtagId: Long) {
         jdbcTemplate.update(
             """
             INSERT INTO jwt_db.public.post_hashtags (post_id, hashtag_id)
@@ -58,7 +57,7 @@ class HashtagJdbcRepository(private val jdbcTemplate: JdbcTemplate) : HashtagRep
         )
     }
 
-    override fun unlinkFromPost(postId: Long) {
+    fun unlinkFromPost(postId: Long) {
         jdbcTemplate.update(
             """
             DELETE FROM jwt_db.public.post_hashtags

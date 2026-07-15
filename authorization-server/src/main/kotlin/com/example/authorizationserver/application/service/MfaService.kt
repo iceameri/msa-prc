@@ -1,7 +1,7 @@
 package com.example.authorizationserver.application.service
 
 import com.example.authorizationserver.application.port.out.UserCachePort
-import com.example.authorizationserver.domain.user.UserRepository
+import com.example.authorizationserver.infrastructure.persistence.UserJdbcRepository
 import dev.samstevens.totp.code.DefaultCodeGenerator
 import dev.samstevens.totp.code.DefaultCodeVerifier
 import dev.samstevens.totp.code.HashingAlgorithm
@@ -14,7 +14,7 @@ import java.util.Base64
 
 @Service
 class MfaService(
-    private val userRepository: UserRepository,
+    private val userRepository: UserJdbcRepository,
     private val userCachePort: UserCachePort
 ) {
     private val secretGenerator = DefaultSecretGenerator()

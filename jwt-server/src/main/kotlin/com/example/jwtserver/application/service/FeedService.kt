@@ -1,14 +1,14 @@
 package com.example.jwtserver.application.service
 
-import com.example.jwtserver.domain.follow.FollowRepository
 import com.example.jwtserver.domain.post.Post
-import com.example.jwtserver.domain.post.PostRepository
+import com.example.jwtserver.infrastructure.persistence.FollowJdbcRepository
+import com.example.jwtserver.infrastructure.persistence.PostJdbcRepository
 import org.springframework.stereotype.Service
 
 @Service
 class FeedService(
-    private val postRepository: PostRepository,
-    private val followRepository: FollowRepository,
+    private val postRepository: PostJdbcRepository,
+    private val followRepository: FollowJdbcRepository,
     private val userSyncService: UserSyncService
 ) {
 

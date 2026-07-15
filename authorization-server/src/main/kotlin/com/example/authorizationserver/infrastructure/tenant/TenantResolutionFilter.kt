@@ -1,6 +1,6 @@
 package com.example.authorizationserver.infrastructure.tenant
 
-import com.example.authorizationserver.domain.tenant.TenantRepository
+import com.example.authorizationserver.infrastructure.persistence.TenantJdbcRepository
 import jakarta.servlet.FilterChain
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
@@ -12,7 +12,7 @@ import org.springframework.web.filter.OncePerRequestFilter
 @Component
 @Order(Ordered.HIGHEST_PRECEDENCE)
 class TenantResolutionFilter(
-    private val tenantRepository: TenantRepository
+    private val tenantRepository: TenantJdbcRepository
 ) : OncePerRequestFilter() {
 
     override fun doFilterInternal(

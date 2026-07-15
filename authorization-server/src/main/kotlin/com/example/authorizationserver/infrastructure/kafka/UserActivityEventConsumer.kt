@@ -1,6 +1,6 @@
 package com.example.authorizationserver.infrastructure.kafka
 
-import com.example.authorizationserver.domain.user.UserActivityRepository
+import com.example.authorizationserver.infrastructure.persistence.UserActivityJdbcRepository
 import org.slf4j.LoggerFactory
 import org.springframework.kafka.annotation.KafkaListener
 import org.springframework.stereotype.Component
@@ -8,7 +8,7 @@ import tools.jackson.databind.ObjectMapper
 
 @Component
 class UserActivityEventConsumer(
-    private val userActivityRepository: UserActivityRepository,
+    private val userActivityRepository: UserActivityJdbcRepository,
     private val objectMapper: ObjectMapper
 ) {
     private val log = LoggerFactory.getLogger(UserActivityEventConsumer::class.java)

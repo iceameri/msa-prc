@@ -2,9 +2,9 @@ package com.example.jwtserver.application.service
 
 import com.example.jwtserver.application.port.out.OutboxRepository
 import com.example.jwtserver.domain.comment.Comment
-import com.example.jwtserver.domain.comment.CommentRepository
 import com.example.jwtserver.domain.event.OutboxEvent
-import com.example.jwtserver.domain.post.PostRepository
+import com.example.jwtserver.infrastructure.persistence.CommentJdbcRepository
+import com.example.jwtserver.infrastructure.persistence.PostJdbcRepository
 import com.example.jwtserver.infrastructure.security.AuthenticatedClient
 import com.example.jwtserver.infrastructure.security.AuthenticatedUser
 import com.example.jwtserver.infrastructure.security.CallerPrincipal
@@ -13,8 +13,8 @@ import org.springframework.transaction.annotation.Transactional
 
 @Service
 class CommentService(
-    private val commentRepository: CommentRepository,
-    private val postRepository: PostRepository,
+    private val commentRepository: CommentJdbcRepository,
+    private val postRepository: PostJdbcRepository,
     private val userSyncService: UserSyncService,
     private val outboxRepository: OutboxRepository
 ) {

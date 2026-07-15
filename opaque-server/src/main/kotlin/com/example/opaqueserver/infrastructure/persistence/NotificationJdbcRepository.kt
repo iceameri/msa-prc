@@ -1,16 +1,15 @@
 package com.example.opaqueserver.infrastructure.persistence
 
 import com.example.opaqueserver.domain.notification.Notification
-import com.example.opaqueserver.domain.notification.NotificationRepository
 import com.example.opaqueserver.domain.notification.NotificationStatus
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.jdbc.support.GeneratedKeyHolder
 import org.springframework.stereotype.Repository
 
 @Repository
-class NotificationJdbcRepository(private val jdbcTemplate: JdbcTemplate) : NotificationRepository {
+class NotificationJdbcRepository(private val jdbcTemplate: JdbcTemplate) {
 
-    override fun save(notification: Notification): Notification {
+    fun save(notification: Notification): Notification {
         val keyHolder = GeneratedKeyHolder()
         jdbcTemplate.update({ con ->
             con.prepareStatement(
@@ -29,7 +28,7 @@ class NotificationJdbcRepository(private val jdbcTemplate: JdbcTemplate) : Notif
         return notification.copy(id = keyHolder.key!!.toLong())
     }
 
-    override fun updateStatus(id: Long, status: NotificationStatus) {
+    fun updateStatus(id: Long, status: NotificationStatus) {
         val sql = if (status == NotificationStatus.SENT)
             """
             UPDATE  opaque_db.public.notifications

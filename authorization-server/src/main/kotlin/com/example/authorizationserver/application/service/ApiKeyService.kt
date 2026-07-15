@@ -1,7 +1,7 @@
 package com.example.authorizationserver.application.service
 
 import com.example.authorizationserver.domain.apikey.ApiKey
-import com.example.authorizationserver.domain.apikey.ApiKeyRepository
+import com.example.authorizationserver.infrastructure.persistence.ApiKeyJdbcRepository
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.stereotype.Service
 import java.security.MessageDigest
@@ -11,7 +11,7 @@ import java.util.Base64
 
 @Service
 class ApiKeyService(
-    private val apiKeyRepository: ApiKeyRepository,
+    private val apiKeyRepository: ApiKeyJdbcRepository,
     private val redis: StringRedisTemplate
 ) {
 

@@ -1,20 +1,19 @@
 package com.example.jwtserver.infrastructure.persistence
 
 import com.example.jwtserver.domain.report.Report
-import com.example.jwtserver.domain.report.ReportRepository
 import com.example.jwtserver.domain.report.ReportTargetType
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.jdbc.support.GeneratedKeyHolder
 import org.springframework.stereotype.Repository
 
 @Repository
-class ReportJdbcRepository(private val jdbcTemplate: JdbcTemplate) : ReportRepository {
+class ReportJdbcRepository(private val jdbcTemplate: JdbcTemplate) {
 
-    override fun save(report: Report): Report {
+    fun save(report: Report): Report {
         val keyHolder = GeneratedKeyHolder()
         jdbcTemplate.update({ con ->
             con.prepareStatement("""
-                INSERT INTO jwt_db.public.reports (reporter_id, target_type, target_id, reason) 
+                INSERT INTO jwt_db.public.reports (reporter_id, target_type, target_id, reason)
                 VALUES (?, ?, ?, ?)
                 """.trimMargin(), arrayOf("id")
             ).apply {

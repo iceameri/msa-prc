@@ -1,7 +1,7 @@
 package com.example.authorizationserver.application.service
 
 import com.example.authorizationserver.application.port.out.PasswordResetCachePort
-import com.example.authorizationserver.domain.user.UserRepository
+import com.example.authorizationserver.infrastructure.persistence.UserJdbcRepository
 import org.springframework.mail.SimpleMailMessage
 import org.springframework.mail.javamail.JavaMailSender
 import org.springframework.security.crypto.password.PasswordEncoder
@@ -10,7 +10,7 @@ import java.util.UUID
 
 @Service
 class PasswordResetService(
-    private val userRepository: UserRepository,
+    private val userRepository: UserJdbcRepository,
     private val passwordResetCachePort: PasswordResetCachePort,
     private val mailSender: JavaMailSender,
     private val passwordEncoder: PasswordEncoder

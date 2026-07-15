@@ -1,14 +1,14 @@
 package com.example.opaqueserver.application.service
 
-import com.example.opaqueserver.domain.report.ReportRepository
 import com.example.opaqueserver.domain.report.ReportStatus
-import com.example.opaqueserver.domain.payment.PaymentRepository
+import com.example.opaqueserver.infrastructure.persistence.PaymentJdbcRepository
+import com.example.opaqueserver.infrastructure.persistence.ReportJdbcRepository
 import org.springframework.stereotype.Service
 
 @Service
 class StatisticsService(
-    private val reportRepository: ReportRepository,
-    private val paymentRepository: PaymentRepository
+    private val reportRepository: ReportJdbcRepository,
+    private val paymentRepository: PaymentJdbcRepository
 ) {
 
     fun getSummary(): Map<String, Any> = mapOf(

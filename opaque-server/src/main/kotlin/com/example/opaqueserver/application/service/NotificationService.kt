@@ -2,16 +2,16 @@ package com.example.opaqueserver.application.service
 
 import com.example.opaqueserver.application.port.out.EmailPort
 import com.example.opaqueserver.domain.notification.Notification
-import com.example.opaqueserver.domain.notification.NotificationRepository
 import com.example.opaqueserver.domain.notification.NotificationStatus
 import com.example.opaqueserver.domain.user.UserRepository
+import com.example.opaqueserver.infrastructure.persistence.NotificationJdbcRepository
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 
 @Service
 class NotificationService(
-    private val notificationRepository: NotificationRepository,
+    private val notificationRepository: NotificationJdbcRepository,
     private val userRepository: UserRepository,
     private val emailPort: EmailPort
 ) {

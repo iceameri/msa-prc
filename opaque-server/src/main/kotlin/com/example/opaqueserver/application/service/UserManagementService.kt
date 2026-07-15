@@ -1,7 +1,7 @@
 package com.example.opaqueserver.application.service
 
 import com.example.opaqueserver.domain.outbox.OutboxEvent
-import com.example.opaqueserver.domain.outbox.OutboxRepository
+import com.example.opaqueserver.infrastructure.persistence.OutboxJdbcRepository
 import tools.jackson.databind.ObjectMapper
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -9,7 +9,7 @@ import org.springframework.transaction.annotation.Transactional
 @Service
 class UserManagementService(
     private val auditService: AuditService,
-    private val outboxRepository: OutboxRepository,
+    private val outboxRepository: OutboxJdbcRepository,
     private val objectMapper: ObjectMapper
 ) {
 

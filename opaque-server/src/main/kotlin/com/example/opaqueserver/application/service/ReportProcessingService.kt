@@ -2,14 +2,14 @@ package com.example.opaqueserver.application.service
 
 import com.example.opaqueserver.application.port.out.EventPublishPort
 import com.example.opaqueserver.domain.report.Report
-import com.example.opaqueserver.domain.report.ReportRepository
 import com.example.opaqueserver.domain.report.ReportStatus
+import com.example.opaqueserver.infrastructure.persistence.ReportJdbcRepository
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 
 @Service
 class ReportProcessingService(
-    private val reportRepository: ReportRepository,
+    private val reportRepository: ReportJdbcRepository,
     private val auditService: AuditService,
     private val eventPublishPort: EventPublishPort
 ) {

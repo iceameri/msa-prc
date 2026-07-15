@@ -1,10 +1,10 @@
 package com.example.jwtserver.application.service
 
-import com.example.jwtserver.domain.user.UserRepository
+import com.example.jwtserver.infrastructure.persistence.UserJdbcRepository
 import org.springframework.stereotype.Service
 
 @Service
-class UserSyncService(private val userRepository: UserRepository) {
+class UserSyncService(private val userRepository: UserJdbcRepository) {
 
     // Kafka consumer는 version을 명시적으로 전달
     // 기회적 동기화(JWT에서 추출)는 version=0 — 새 유저면 INSERT, 기존 유저면 version < 0이 false라 무시됨
