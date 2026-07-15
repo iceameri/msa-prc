@@ -16,41 +16,65 @@ class PaymentJdbcRepository(private val jdbcTemplate: JdbcTemplate) : PaymentRep
     override fun findById(id: Long): Payment? =
         jdbcTemplate.query(
             """
-            SELECT  *
+            SELECT  id,
+                    user_id,
+                    order_id,
+                    amount,
+                    status,
+                    created_at,
+                    updated_at
             FROM    opaque_db.public.payments
             WHERE   id = ?
-            """.trimIndent(),
+            """.trimMargin(),
             ::mapRow, id
         ).firstOrNull()
 
     override fun findByOrderId(orderId: String): Payment? =
         jdbcTemplate.query(
             """
-            SELECT  *
+            SELECT  id,
+                    user_id,
+                    order_id,
+                    amount,
+                    status,
+                    created_at,
+                    updated_at
             FROM    opaque_db.public.payments
             WHERE   order_id = ?
-            """.trimIndent(),
+            """.trimMargin(),
             ::mapRow, orderId
         ).firstOrNull()
 
     override fun findByIdAndUserId(id: Long, userId: Long): Payment? =
         jdbcTemplate.query(
             """
-            SELECT  *
+            SELECT  id,
+                    user_id,
+                    order_id,
+                    amount,
+                    status,
+                    created_at,
+                    updated_at
             FROM    opaque_db.public.payments
             WHERE   id = ? AND user_id = ?
-            """.trimIndent(),
+            """.trimMargin(),
             ::mapRow, id, userId
         ).firstOrNull()
 
     override fun findByUserId(userId: Long): List<Payment> =
         jdbcTemplate.query(
             """
-            SELECT  *
+            SELECT  id,
+                    user_id,
+                    order_id,
+                    amount,
+                    status,
+                    created_at,
+                    updated_at
             FROM    opaque_db.public.payments
             WHERE   user_id = ?
             ORDER BY created_at DESC
-            """.trimIndent(),
+            """.trimMargin(),
             ::mapRow, userId
         )
 
@@ -61,7 +85,7 @@ class PaymentJdbcRepository(private val jdbcTemplate: JdbcTemplate) : PaymentRep
                 """
                 INSERT INTO opaque_db.public.payments (user_id, order_id, amount, status)
                 VALUES (?, ?, ?, ?)
-                """.trimIndent(),
+                """.trimMargin(),
                 arrayOf("id")
             ).apply {
                 setLong(1, payment.userId)
@@ -79,7 +103,7 @@ class PaymentJdbcRepository(private val jdbcTemplate: JdbcTemplate) : PaymentRep
             UPDATE  opaque_db.public.payments
             SET     status = ?, updated_at = NOW()
             WHERE   id = ?
-            """.trimIndent(),
+            """.trimMargin(),
             status.name, id
         )
     }
@@ -90,7 +114,7 @@ class PaymentJdbcRepository(private val jdbcTemplate: JdbcTemplate) : PaymentRep
             SELECT  COALESCE(SUM(amount), 0)
             FROM    opaque_db.public.payments
             WHERE   status = 'COMPLETED'
-            """.trimIndent()
+            """.trimMargin()
         ) ?: BigDecimal.ZERO
 
     private fun mapRow(rs: ResultSet, @Suppress("UNUSED_PARAMETER") n: Int) = Payment(

@@ -21,19 +21,34 @@ class PostJdbcRepository(private val jdbcTemplate: JdbcTemplate) : PostRepositor
 
     override fun findById(id: Long): Post? =
         jdbcTemplate.query(
-            "$selectBase WHERE p.id = ? AND p.status = 'ACTIVE'",
+            """
+            $selectBase
+            WHERE p.id = ?
+            AND p.status = 'ACTIVE'
+            """.trimMargin(),
             ::mapRow, id
         ).firstOrNull()
 
     override fun findAll(offset: Int, limit: Int): List<Post> =
         jdbcTemplate.query(
-            "$selectBase WHERE p.status = 'ACTIVE' ORDER BY p.id ASC LIMIT ? OFFSET ?",
+            """
+            $selectBase
+            WHERE p.status = 'ACTIVE'
+            ORDER BY p.id
+            LIMIT ? OFFSET ?
+            """.trimMargin(),
             ::mapRow, limit, offset
         )
 
     override fun findByAuthorId(authorId: Long, offset: Int, limit: Int): List<Post> =
         jdbcTemplate.query(
-            "$selectBase WHERE p.author_id = ? AND p.status = 'ACTIVE' ORDER BY p.created_at DESC LIMIT ? OFFSET ?",
+            """
+            $selectBase
+            WHERE p.author_id = ?
+            AND p.status = 'ACTIVE'
+            ORDER BY p.created_at DESC
+            LIMIT ? OFFSET ?
+            """.trimMargin(),
             ::mapRow, authorId, limit, offset
         )
 
@@ -41,7 +56,12 @@ class PostJdbcRepository(private val jdbcTemplate: JdbcTemplate) : PostRepositor
         val placeholders = followingIds.joinToString(",") { "?" }
         val args: Array<Any> = (followingIds.map { it as Any } + limit + offset).toTypedArray()
         return jdbcTemplate.query(
-            "$selectBase WHERE p.author_id IN ($placeholders) AND p.status = 'ACTIVE' ORDER BY p.created_at DESC LIMIT ? OFFSET ?",
+            """
+            $selectBase
+            WHERE   p.author_id IN ($placeholders)
+            AND     p.status = 'ACTIVE'
+            ORDER BY p.created_at DESC LIMIT ? OFFSET ?
+            """.trimMargin(),
             ::mapRow, *args
         )
     }
@@ -54,7 +74,7 @@ class PostJdbcRepository(private val jdbcTemplate: JdbcTemplate) : PostRepositor
             JOIN    jwt_db.public.hashtags h       ON ph.hashtag_id = h.id
             WHERE   h.name = ? AND p.status = 'ACTIVE'
             ORDER BY p.created_at DESC LIMIT ? OFFSET ?
-            """.trimIndent(),
+            """.trimMargin(),
             ::mapRow, hashtagName, limit, offset
         )
 
@@ -65,7 +85,7 @@ class PostJdbcRepository(private val jdbcTemplate: JdbcTemplate) : PostRepositor
                 """
                 INSERT INTO jwt_db.public.posts (author_id, client_id, title, content, image_url)
                 VALUES (?, ?, ?, ?, ?)
-                """.trimIndent(),
+                """.trimMargin(),
                 arrayOf("id")
             ).apply {
                 if (post.authorId != null) setLong(1, post.authorId) else setNull(1, Types.BIGINT)
@@ -84,7 +104,7 @@ class PostJdbcRepository(private val jdbcTemplate: JdbcTemplate) : PostRepositor
             UPDATE  jwt_db.public.posts
             SET     title = ?, content = ?, image_url = ?, updated_at = NOW()
             WHERE   id = ?
-            """.trimIndent(),
+            """.trimMargin(),
             post.title, post.content, post.imageUrl, post.id
         )
     }
@@ -95,7 +115,7 @@ class PostJdbcRepository(private val jdbcTemplate: JdbcTemplate) : PostRepositor
             UPDATE  jwt_db.public.posts
             SET     status = 'DELETED', updated_at = NOW()
             WHERE   id = ?
-            """.trimIndent(),
+            """.trimMargin(),
             id
         )
     }
@@ -106,7 +126,7 @@ class PostJdbcRepository(private val jdbcTemplate: JdbcTemplate) : PostRepositor
             UPDATE  jwt_db.public.posts
             SET     like_count = like_count + 1
             WHERE   id = ?
-            """.trimIndent(),
+            """.trimMargin(),
             id
         )
     }
@@ -117,7 +137,7 @@ class PostJdbcRepository(private val jdbcTemplate: JdbcTemplate) : PostRepositor
             UPDATE  jwt_db.public.posts
             SET     like_count = GREATEST(0, like_count - 1)
             WHERE   id = ?
-            """.trimIndent(),
+            """.trimMargin(),
             id
         )
     }
@@ -128,7 +148,7 @@ class PostJdbcRepository(private val jdbcTemplate: JdbcTemplate) : PostRepositor
             UPDATE  jwt_db.public.posts
             SET     comment_count = comment_count + 1
             WHERE   id = ?
-            """.trimIndent(),
+            """.trimMargin(),
             id
         )
     }
@@ -139,7 +159,7 @@ class PostJdbcRepository(private val jdbcTemplate: JdbcTemplate) : PostRepositor
             UPDATE  jwt_db.public.posts
             SET     comment_count = GREATEST(0, comment_count - 1)
             WHERE   id = ?
-            """.trimIndent(),
+            """.trimMargin(),
             id
         )
     }

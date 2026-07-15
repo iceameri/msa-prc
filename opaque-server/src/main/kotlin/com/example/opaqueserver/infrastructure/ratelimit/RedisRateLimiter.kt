@@ -31,7 +31,7 @@ class RedisRateLimiter(private val stringRedisTemplate: StringRedisTemplate) {
             redis.call('EXPIRE', key, 60)
             return 0
         end
-        """.trimIndent(),
+        """.trimMargin(),
         Long::class.java
     )
 

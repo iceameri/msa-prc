@@ -17,19 +17,43 @@ class ReportJdbcRepository(private val jdbcTemplate: JdbcTemplate) : ReportRepos
 
     override fun findByStatus(status: ReportStatus, offset: Int, limit: Int): List<Report> =
         jdbcTemplate.query(
-            "SELECT * FROM opaque_db.public.reports WHERE status = ? ORDER BY created_at ASC LIMIT ? OFFSET ?",
+            """
+            SELECT  id,
+                    external_id,
+                    reporter_username,
+                    target_type,
+                    target_id,
+                    reason,
+                    status,
+                    reviewed_by,
+                    reviewed_at,
+                    created_at
+            FROM    opaque_db.public.reports
+            WHERE   status = ?
+            ORDER BY created_at 
+            LIMIT ? OFFSET ?
+            """.trimMargin(),
             ::mapRow, status.name, limit, offset
         )
 
     override fun existsByExternalId(externalId: Long): Boolean =
-        (jdbcTemplate.queryForObject<Int>("SELECT COUNT(*) FROM opaque_db.public.reports WHERE external_id = ?",
-            externalId) ?: 0) > 0
+        (jdbcTemplate.queryForObject<Int>(
+            """
+            SELECT  COUNT(*)
+            FROM    opaque_db.public.reports
+            WHERE   external_id = ?
+            """.trimMargin(),
+            externalId
+        ) ?: 0) > 0
 
     override fun save(report: Report): Report {
         val keyHolder = GeneratedKeyHolder()
         jdbcTemplate.update({ con ->
             con.prepareStatement(
-                "INSERT INTO opaque_db.public.reports (external_id, reporter_username, target_type, target_id, reason) VALUES (?, ?, ?, ?, ?)",
+                """
+                INSERT INTO opaque_db.public.reports (external_id, reporter_username, target_type, target_id, reason)
+                VALUES (?, ?, ?, ?, ?)
+                """.trimMargin(),
                 arrayOf("id")
             ).apply {
                 setLong(1, report.externalId)
@@ -44,13 +68,26 @@ class ReportJdbcRepository(private val jdbcTemplate: JdbcTemplate) : ReportRepos
 
     override fun updateStatus(id: Long, status: ReportStatus, reviewedBy: String) {
         jdbcTemplate.update(
-            "UPDATE opaque_db.public.reports SET status = ?, reviewed_by = ?, reviewed_at = NOW() WHERE id = ?",
+            """
+            UPDATE  opaque_db.public.reports
+            SET     status = ?,
+                    reviewed_by = ?,
+                    reviewed_at = NOW()
+            WHERE   id = ?
+            """.trimMargin(),
             status.name, reviewedBy, id
         )
     }
 
     override fun countByStatus(status: ReportStatus): Int =
-        jdbcTemplate.queryForObject<Int>("SELECT COUNT(*) FROM opaque_db.public.reports WHERE status = ?", status.name) ?: 0
+        jdbcTemplate.queryForObject<Int>(
+            """
+            SELECT  COUNT(*)
+            FROM    opaque_db.public.reports
+            WHERE   status = ?
+            """.trimMargin(),
+            status.name
+        ) ?: 0
 
     private fun mapRow(rs: ResultSet, @Suppress("UNUSED_PARAMETER") n: Int) = Report(
         id = rs.getLong("id"),

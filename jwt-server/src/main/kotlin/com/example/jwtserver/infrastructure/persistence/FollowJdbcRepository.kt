@@ -16,7 +16,7 @@ class FollowJdbcRepository(private val jdbcTemplate: JdbcTemplate) : FollowRepos
             SELECT  COUNT(*)
             FROM    jwt_db.public.follows
             WHERE   follower_id = ? AND following_id = ?
-            """.trimIndent(),
+            """.trimMargin(),
             followerId, followingId
         ) ?: 0) > 0
 
@@ -25,7 +25,7 @@ class FollowJdbcRepository(private val jdbcTemplate: JdbcTemplate) : FollowRepos
             """
             INSERT INTO jwt_db.public.follows (follower_id, following_id)
             VALUES (?, ?) ON CONFLICT DO NOTHING
-            """.trimIndent(),
+            """.trimMargin(),
             follow.followerId, follow.followingId
         )
     }
@@ -35,7 +35,7 @@ class FollowJdbcRepository(private val jdbcTemplate: JdbcTemplate) : FollowRepos
             """
             DELETE FROM jwt_db.public.follows
             WHERE   follower_id = ? AND following_id = ?
-            """.trimIndent(),
+            """.trimMargin(),
             followerId, followingId
         )
     }
@@ -46,7 +46,7 @@ class FollowJdbcRepository(private val jdbcTemplate: JdbcTemplate) : FollowRepos
             SELECT  following_id
             FROM    jwt_db.public.follows
             WHERE   follower_id = ?
-            """.trimIndent(),
+            """.trimMargin(),
             followerId
         ).filterNotNull()
 
@@ -56,7 +56,7 @@ class FollowJdbcRepository(private val jdbcTemplate: JdbcTemplate) : FollowRepos
             SELECT  COUNT(*)
             FROM    jwt_db.public.follows
             WHERE   following_id = ?
-            """.trimIndent(),
+            """.trimMargin(),
             userId
         ) ?: 0
 
@@ -66,7 +66,7 @@ class FollowJdbcRepository(private val jdbcTemplate: JdbcTemplate) : FollowRepos
             SELECT  COUNT(*)
             FROM    jwt_db.public.follows
             WHERE   follower_id = ?
-            """.trimIndent(),
+            """.trimMargin(),
             userId
         ) ?: 0
 }

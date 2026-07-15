@@ -40,7 +40,7 @@ class SessionLimitingAuthorizationService(
             FROM    authorization_db.public.oauth2_authorization
             WHERE   principal_name = ? AND registered_client_id = ?
             ORDER BY COALESCE(access_token_issued_at, authorization_code_issued_at)
-            """.trimIndent(),
+            """.trimMargin(),
             principalName, registeredClientId
         )
         if (ids.size >= MAX_SESSIONS) {

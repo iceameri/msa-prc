@@ -12,20 +12,32 @@ class UserJdbcRepository(private val jdbcTemplate: JdbcTemplate) : UserRepositor
     override fun findById(id: Long): User? =
         jdbcTemplate.query(
             """
-            SELECT  user_id, username, enabled, status, version, created_at
+            SELECT  user_id,
+                    username,
+                    enabled,
+                    status,
+                    version,
+                    created_at,
+                    updated_at
             FROM    jwt_db.public.authorization_users
             WHERE   user_id = ?
-            """.trimIndent(),
+            """.trimMargin(),
             ::mapRow, id
         ).firstOrNull()
 
     override fun findByUsername(username: String): User? =
         jdbcTemplate.query(
             """
-            SELECT  user_id, username, enabled, status, version, created_at
+            SELECT  user_id,
+                    username,
+                    enabled,
+                    status,
+                    version,
+                    created_at,
+                    updated_at
             FROM    jwt_db.public.authorization_users
             WHERE   username = ?
-            """.trimIndent(),
+            """.trimMargin(),
             ::mapRow, username
         ).firstOrNull()
 
@@ -41,7 +53,7 @@ class UserJdbcRepository(private val jdbcTemplate: JdbcTemplate) : UserRepositor
                     version    = EXCLUDED.version,
                     updated_at = NOW()
             WHERE authorization_users.version < EXCLUDED.version
-            """.trimIndent(),
+            """.trimMargin(),
             userId, username, enabled, status, version
         )
     }
@@ -57,7 +69,7 @@ class UserJdbcRepository(private val jdbcTemplate: JdbcTemplate) : UserRepositor
                     version    = EXCLUDED.version,
                     updated_at = NOW()
             WHERE authorization_users.version < EXCLUDED.version
-            """.trimIndent(),
+            """.trimMargin(),
             userId, newUsername, version
         )
     }

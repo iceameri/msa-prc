@@ -14,7 +14,7 @@ class OutboxJdbcRepository(private val jdbcTemplate: JdbcTemplate) : OutboxRepos
             """
             INSERT INTO jwt_db.public.outbox_events (aggregate_id, aggregate_type, event_type, payload)
             VALUES (?, ?, ?, ?::jsonb)
-            """.trimIndent(),
+            """.trimMargin(),
             event.aggregateId, event.aggregateType, event.eventType, event.payload
         )
     }
@@ -34,7 +34,7 @@ class OutboxJdbcRepository(private val jdbcTemplate: JdbcTemplate) : OutboxRepos
                 FOR UPDATE SKIP LOCKED
             )
             RETURNING id, aggregate_id, aggregate_type, event_type, payload::text, claimed_at, sent_at, created_at
-            """.trimIndent(),
+            """.trimMargin(),
             ::mapRow, limit
         )
 
@@ -44,7 +44,7 @@ class OutboxJdbcRepository(private val jdbcTemplate: JdbcTemplate) : OutboxRepos
             UPDATE  jwt_db.public.outbox_events
             SET     sent_at = NOW()
             WHERE   id = ?
-            """.trimIndent(),
+            """.trimMargin(),
             id
         )
     }
@@ -55,7 +55,7 @@ class OutboxJdbcRepository(private val jdbcTemplate: JdbcTemplate) : OutboxRepos
             UPDATE  jwt_db.public.outbox_events
             SET     claimed_at = NULL
             WHERE   id = ?
-            """.trimIndent(),
+            """.trimMargin(),
             id
         )
     }
@@ -70,7 +70,7 @@ class OutboxJdbcRepository(private val jdbcTemplate: JdbcTemplate) : OutboxRepos
             WHERE   claimed_at IS NOT NULL AND
                     sent_at IS NULL AND
                     claimed_at < NOW() - INTERVAL '30 seconds'
-            """.trimIndent()
+            """.trimMargin()
         )
     }
 
@@ -81,7 +81,7 @@ class OutboxJdbcRepository(private val jdbcTemplate: JdbcTemplate) : OutboxRepos
             DELETE FROM jwt_db.public.outbox_events
             WHERE   sent_at IS NOT NULL AND
                     sent_at < NOW() - INTERVAL '7 days'
-            """.trimIndent()
+            """.trimMargin()
         )
     }
 

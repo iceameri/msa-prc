@@ -15,7 +15,8 @@ class ReportJdbcRepository(private val jdbcTemplate: JdbcTemplate) : ReportRepos
         jdbcTemplate.update({ con ->
             con.prepareStatement("""
                 INSERT INTO jwt_db.public.reports (reporter_id, target_type, target_id, reason) 
-                VALUES (?, ?, ?, ?)""".trimIndent(), arrayOf("id")
+                VALUES (?, ?, ?, ?)
+                """.trimMargin(), arrayOf("id")
             ).apply {
                 setLong(1, report.reporterId)
                 setString(2, report.targetType.name)

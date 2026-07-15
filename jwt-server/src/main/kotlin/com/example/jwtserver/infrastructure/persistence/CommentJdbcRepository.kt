@@ -12,7 +12,13 @@ import java.sql.Types
 class CommentJdbcRepository(private val jdbcTemplate: JdbcTemplate) : CommentRepository {
 
     private val selectBase = """
-        SELECT    c.*,
+        SELECT    c.id,
+                  c.post_id,
+                  c.author_id,
+                  c.client_id,
+                  c.content,
+                  c.created_at,
+                  c.updated_at,
                   COALESCE(u.username, sc.display_name) AS author_username
         FROM      jwt_db.public.comments c
         LEFT JOIN jwt_db.public.authorization_users u ON c.author_id = u.user_id
@@ -20,13 +26,20 @@ class CommentJdbcRepository(private val jdbcTemplate: JdbcTemplate) : CommentRep
 
     override fun findById(id: Long): Comment? =
         jdbcTemplate.query(
-            "$selectBase WHERE c.id = ?",
+            """
+            $selectBase
+            WHERE c.id = ?
+            """.trimMargin(),
             ::mapRow, id
         ).firstOrNull()
 
     override fun findByPostId(postId: Long, offset: Int, limit: Int): List<Comment> =
         jdbcTemplate.query(
-            "$selectBase WHERE c.post_id = ? ORDER BY c.created_at LIMIT ? OFFSET ?",
+            """
+            $selectBase
+            WHERE   c.post_id = ?
+            ORDER BY c.created_at
+            LIMIT ? OFFSET ?""",
             ::mapRow, postId, limit, offset
         )
 
@@ -38,7 +51,7 @@ class CommentJdbcRepository(private val jdbcTemplate: JdbcTemplate) : CommentRep
                 INSERT INTO jwt_db.public.comments
                 (post_id, author_id, client_id, content)
                 VALUES (?, ?, ?, ?)
-                """.trimIndent(),
+                """.trimMargin(),
                 arrayOf("id")
             ).apply {
                 setLong(1, comment.postId)
@@ -56,7 +69,7 @@ class CommentJdbcRepository(private val jdbcTemplate: JdbcTemplate) : CommentRep
             UPDATE  jwt_db.public.comments
             SET     content = ?, updated_at = NOW()
             WHERE   id = ?
-            """.trimIndent(),
+            """.trimMargin(),
             comment.content, comment.id
         )
     }
@@ -66,7 +79,7 @@ class CommentJdbcRepository(private val jdbcTemplate: JdbcTemplate) : CommentRep
             """
             DELETE FROM jwt_db.public.comments
             WHERE   id = ?
-            """.trimIndent(),
+            """.trimMargin(),
             id
         )
     }

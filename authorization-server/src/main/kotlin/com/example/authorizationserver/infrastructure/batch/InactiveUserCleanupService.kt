@@ -23,7 +23,7 @@ class InactiveUserCleanupService(
             SELECT  user_id
             FROM    authorization_db.public.user_activity
             WHERE   last_active_at < NOW() - INTERVAL '90 days'
-            """.trimIndent()
+            """.trimMargin()
         )
         userIds.filterNotNull().forEach { userId ->
             kafkaTemplate.send("user-management", userId.toString(), """{"action":"SUSPEND","userId":$userId}""")

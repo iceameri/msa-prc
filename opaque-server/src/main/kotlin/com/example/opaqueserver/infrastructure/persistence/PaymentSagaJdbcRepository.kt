@@ -16,7 +16,10 @@ class PaymentSagaJdbcRepository(private val jdbcTemplate: JdbcTemplate) : Paymen
         val keyHolder = GeneratedKeyHolder()
         jdbcTemplate.update({ con ->
             con.prepareStatement(
-                "INSERT INTO opaque_db.public.payment_sagas (payment_id, step, status, detail) VALUES (?, ?, ?, ?)", arrayOf("id")
+                """
+                |INSERT INTO opaque_db.public.payment_sagas (payment_id, step, status, detail) 
+                |VALUES (?, ?, ?, ?)
+                |""".trimMargin(), arrayOf("id")
             ).apply {
                 setLong(1, saga.paymentId)
                 setString(2, saga.step.name)
@@ -29,7 +32,17 @@ class PaymentSagaJdbcRepository(private val jdbcTemplate: JdbcTemplate) : Paymen
 
     override fun findByPaymentId(paymentId: Long): List<PaymentSaga> =
         jdbcTemplate.query(
-            "SELECT * FROM opaque_db.public.payment_sagas WHERE payment_id = ? ORDER BY created_at ASC",
+            """
+            |SELECT id,
+                    payment_id,
+                    step,
+                    status,
+                    detail,
+                    created_at
+            |FROM   opaque_db.public.payment_sagas
+            |WHERE  payment_id = ?
+            |ORDER BY created_at
+            |""".trimMargin(),
             ::mapRow, paymentId
         )
 

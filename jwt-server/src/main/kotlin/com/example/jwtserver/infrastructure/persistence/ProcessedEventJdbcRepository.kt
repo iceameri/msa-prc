@@ -12,7 +12,7 @@ class ProcessedEventJdbcRepository(private val jdbcTemplate: JdbcTemplate) : Pro
             """
             INSERT INTO jwt_db.public.processed_kafka_events (event_id, topic)
             VALUES (?, ?) ON CONFLICT (event_id) DO NOTHING
-            """.trimIndent(),
+            """.trimMargin(),
             eventId, topic
         )
         return affected > 0
@@ -23,7 +23,7 @@ class ProcessedEventJdbcRepository(private val jdbcTemplate: JdbcTemplate) : Pro
             """
             DELETE FROM jwt_db.public.processed_kafka_events
             WHERE   processed_at < NOW() - (? || ' days')::INTERVAL
-            """.trimIndent(),
+            """.trimMargin(),
             days.toString()
         )
     }

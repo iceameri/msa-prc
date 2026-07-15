@@ -17,7 +17,7 @@ class NotificationJdbcRepository(private val jdbcTemplate: JdbcTemplate) : Notif
                 """
                 INSERT INTO opaque_db.public.notifications (recipient_id, recipient_username, type, content)
                 VALUES (?, ?, ?, ?)
-                """.trimIndent(),
+                """.trimMargin(),
                 arrayOf("id")
             ).apply {
                 setString(1, notification.recipientId)
@@ -35,13 +35,13 @@ class NotificationJdbcRepository(private val jdbcTemplate: JdbcTemplate) : Notif
             UPDATE  opaque_db.public.notifications
             SET     status = ?, sent_at = NOW()
             WHERE   id = ?
-            """.trimIndent()
+            """.trimMargin()
         else
             """
             UPDATE  opaque_db.public.notifications
             SET     status = ?
             WHERE   id = ?
-            """.trimIndent()
+            """.trimMargin()
         jdbcTemplate.update(sql, status.name, id)
     }
 }

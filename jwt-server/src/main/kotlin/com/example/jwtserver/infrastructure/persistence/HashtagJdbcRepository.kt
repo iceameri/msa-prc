@@ -16,7 +16,7 @@ class HashtagJdbcRepository(private val jdbcTemplate: JdbcTemplate) : HashtagRep
             SELECT  id, name
             FROM    jwt_db.public.hashtags
             WHERE   name = ?
-            """.trimIndent(),
+            """.trimMargin(),
             ::mapRow, name
         ).firstOrNull()
 
@@ -27,7 +27,7 @@ class HashtagJdbcRepository(private val jdbcTemplate: JdbcTemplate) : HashtagRep
             FROM    jwt_db.public.hashtags h
             JOIN    jwt_db.public.post_hashtags ph ON h.id = ph.hashtag_id
             WHERE   ph.post_id = ?
-            """.trimIndent(),
+            """.trimMargin(),
             ::mapRow, postId
         )
 
@@ -40,7 +40,7 @@ class HashtagJdbcRepository(private val jdbcTemplate: JdbcTemplate) : HashtagRep
                     """
                     INSERT INTO jwt_db.public.hashtags (name)
                     VALUES (?) ON CONFLICT (name) DO NOTHING
-                    """.trimIndent(),
+                    """.trimMargin(),
                     arrayOf("id")
                 ).apply { setString(1, lower) }
             }, keyHolder)
@@ -53,7 +53,7 @@ class HashtagJdbcRepository(private val jdbcTemplate: JdbcTemplate) : HashtagRep
             """
             INSERT INTO jwt_db.public.post_hashtags (post_id, hashtag_id)
             VALUES (?, ?) ON CONFLICT DO NOTHING
-            """.trimIndent(),
+            """.trimMargin(),
             postId, hashtagId
         )
     }
@@ -63,7 +63,7 @@ class HashtagJdbcRepository(private val jdbcTemplate: JdbcTemplate) : HashtagRep
             """
             DELETE FROM jwt_db.public.post_hashtags
             WHERE   post_id = ?
-            """.trimIndent(),
+            """.trimMargin(),
             postId
         )
     }
