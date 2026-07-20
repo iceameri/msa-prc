@@ -47,7 +47,7 @@ class JwtClaimsFilter(
 
         if (userId != null) {
             val username = claims["sub"] as String
-            val roles = authoritiesCachePort.getAuthorities(username)?.toList() ?: emptyList()
+            val roles = authoritiesCachePort.getAuthorities(userId.toLong())?.toList() ?: emptyList()
             return UsernamePasswordAuthenticationToken(
                 AuthenticatedUser(userId.toLong(), username, roles),
                 null,

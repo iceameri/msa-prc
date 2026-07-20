@@ -14,6 +14,6 @@ class RedisAuthoritiesCache(
     }
 
     @Suppress("UNCHECKED_CAST")
-    override fun getAuthorities(username: String): Set<String>? =
-        redisTemplate.opsForValue().get("$AUTHORITIES_PREFIX$username") as? Set<String>
+    override fun getAuthorities(userId: Long): Set<String>? =
+        redisTemplate.opsForValue().get("$AUTHORITIES_PREFIX$userId") as? Set<String>
 }

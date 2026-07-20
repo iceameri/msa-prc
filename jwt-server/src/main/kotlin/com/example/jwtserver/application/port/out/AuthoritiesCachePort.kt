@@ -1,5 +1,5 @@
 package com.example.jwtserver.application.port.out
 
 interface AuthoritiesCachePort {
-    fun getAuthorities(username: String): Set<String>?
+    fun getAuthorities(userId: Long): Set<String>?
 }

@@ -43,8 +43,8 @@ class RedisUserCache(
         redisTemplate.delete(userKey(username, tenantId))
     }
 
-    override fun deleteAuthorities(username: String) {
-        redisTemplate.delete("$AUTHORITIES_PREFIX$username")
+    override fun deleteAuthorities(userId: Long) {
+        redisTemplate.delete("$AUTHORITIES_PREFIX$userId")
     }
 
     override fun getLoginAttempts(username: String): Int =
@@ -61,13 +61,13 @@ class RedisUserCache(
         redisTemplate.delete("$ATTEMPTS_PREFIX$username")
     }
 
-    override fun saveAuthorities(username: String, authorities: Set<String?>) {
-        redisTemplate.opsForValue().set("$AUTHORITIES_PREFIX$username", authorities, AUTHORITIES_TTL)
+    override fun saveAuthorities(userId: Long, authorities: Set<String?>) {
+        redisTemplate.opsForValue().set("$AUTHORITIES_PREFIX$userId", authorities, AUTHORITIES_TTL)
     }
 
     @Suppress("UNCHECKED_CAST")
-    override fun getAuthorities(username: String): Set<String>? =
-        redisTemplate.opsForValue().get("$AUTHORITIES_PREFIX$username") as? Set<String>
+    override fun getAuthorities(userId: Long): Set<String>? =
+        redisTemplate.opsForValue().get("$AUTHORITIES_PREFIX$userId") as? Set<String>
 
     override fun savePendingMfaSecret(username: String, secret: String) {
         redisTemplate.opsForValue().set("$MFA_PENDING_PREFIX$username", secret, MFA_PENDING_TTL)

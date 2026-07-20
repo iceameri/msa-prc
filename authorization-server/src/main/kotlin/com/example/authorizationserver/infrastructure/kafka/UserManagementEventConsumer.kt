@@ -52,7 +52,7 @@ class UserManagementEventConsumer(
 
     private fun evictAndRevoke(userId: Long) {
         val user = userRepository.findById(userId) ?: return
-        userCachePort.deleteAuthorities(user.username)
+        userCachePort.deleteAuthorities(userId)
         if (user.tenantId != null) userCachePort.deleteUser(user.username, user.tenantId)
         else userCachePort.deleteUser(user.username)
         tokenRevocationService.revokeAllForPrincipal(user.username)

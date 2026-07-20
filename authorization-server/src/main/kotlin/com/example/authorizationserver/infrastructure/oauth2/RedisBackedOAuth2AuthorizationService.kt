@@ -31,10 +31,10 @@ class RedisBackedOAuth2AuthorizationService(
         runCatching { evictAll(authorization) }
     }
 
-    override fun findById(id: String): OAuth2Authorization? =
+    override fun findById(id: String): OAuth2Authorization =
         cb.executeSupplier { delegate.findById(id) }
 
-    override fun findByToken(token: String, tokenType: OAuth2TokenType?): OAuth2Authorization? {
+    override fun findByToken(token: String, tokenType: OAuth2TokenType?): OAuth2Authorization {
         val cachedId = runCatching { redis.opsForValue().get(KEY_PREFIX + token) }.getOrNull()
 
         if (cachedId != null) {
@@ -67,15 +67,15 @@ class RedisBackedOAuth2AuthorizationService(
     }
 
     private fun tokenValues(auth: OAuth2Authorization): List<String> = listOfNotNull(
-        auth.getAccessToken()?.token?.tokenValue,
-        auth.getRefreshToken()?.token?.tokenValue,
+        auth.accessToken?.token?.tokenValue,
+        auth.refreshToken?.token?.tokenValue,
         auth.getToken(OAuth2AuthorizationCode::class.java)?.token?.tokenValue,
         auth.getToken(OidcIdToken::class.java)?.token?.tokenValue,
     )
 
     private fun resolveTtl(auth: OAuth2Authorization): Duration {
-        val expiresAt = auth.getRefreshToken()?.token?.expiresAt
-            ?: auth.getAccessToken()?.token?.expiresAt
+        val expiresAt = auth.refreshToken?.token?.expiresAt
+            ?: auth.accessToken?.token?.expiresAt
         val ttl = expiresAt?.let { Duration.between(Instant.now(), it) }
         return if (ttl == null || ttl.isNegative || ttl.isZero) FALLBACK_TTL else ttl
     }

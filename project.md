@@ -125,18 +125,18 @@ authorization-server
 - Token revocation endpoint
 - 비밀번호 재설정 플로우
 - 로그아웃 (POST /api/logout) — SLO (Single Logout)
-  - RedisLogoutHandler: jwt:authorities:{username} + auth:user:{username} Redis 삭제
+  - RedisLogoutHandler: jwt:authorities:{userId} + auth:user:{username} Redis 삭제
   - TokenRevocationService.revokeAllForPrincipal(): oauth2_authorization 테이블 Refresh Token 폐기 (재발급 차단)
   - HTTP 세션 무효화 + SecurityContext 클리어
   - 성공 시 /login?logout 리다이렉트
 
 권한(Authorities) 설계
 - JWT payload에 authorities 미포함 (노출 방지)
-- 로그인 성공 시 authorities → Redis 저장 (key: jwt:authorities:{username}, TTL: 24h)
+- 로그인 성공 시 authorities → Redis 저장 (key: jwt:authorities:{userId}, TTL: 24h)
 - ~~gateway에서 요청마다 Redis 조회 → X-User-Authorities 헤더로 하위 서비스에 전달~~
 - ~~하위 서비스(jwt-server)는 헤더를 신뢰하여 SecurityContext 구성 (Redis 직접 접근 없음)~~
 - ~~Redis miss 시 빈 권한으로 헤더 전달 → 하위 서비스에서 403 → 클라이언트 재로그인 유도~~
-- 현재: jwt-server/opaque-server가 Redis jwt:authorities:{username} 직접 조회 (Zero Trust)
+- 현재: jwt-server/opaque-server가 Redis jwt:authorities:{userId} 직접 조회 (Zero Trust)
 
 MFA / TOTP (Google Authenticator)
 - setup: secret 생성 → Redis 임시 저장(auth:mfa:pending:{username}, TTL 10분) → QR base64 반환
@@ -184,7 +184,7 @@ Redis 키 네임스페이스 (단일 Redis 인스턴스, prefix로 논리 분리
 - auth:mfa:pending:{username}        → MFA setup 임시 secret (TTL 10분)
 - auth:qr:{token}                    → QR 로그인 세션 (TTL 5분)
 - auth:reset:{token}                 → 비밀번호 재설정 토큰 (TTL 30분)
-- jwt:authorities:{username}         → 유저 권한 목록 (TTL 24h) ← authorization-server write / jwt-server·opaque-server read
+- jwt:authorities:{userId}           → 유저 권한 목록 (TTL 24h) ← authorization-server write / jwt-server·opaque-server read
 - oauth2:token:{tokenValue}          → authorizationId (TTL: refresh token 만료 기준, StringRedisTemplate) ← RedisBackedOAuth2AuthorizationService
 - rl:config:{apiKeyId}               → Open API 키 레이트리밋 설정 "{burst}:{refill}" (영구, 키 폐기 시 삭제)
 - rl:count:{apiKeyId}:{minuteWindow} → Open API 키 분당 요청 카운터 (TTL 2분, INCR 원자적)
@@ -334,7 +334,7 @@ CORS
   - Istio가 거부한 요청은 앱까지 도달하지 않음 (K8s 환경)
   - 로컬(Istio 없음): 서명 검증 없이 JWT payload Base64 파싱만 수행 (개발 편의)
 - JwtClaimsFilter (OncePerRequestFilter): Istio 검증 통과 후 Authorization 헤더에서 클레임 파싱
-  - user_id 클레임 있음 → 유저 토큰: sub(username)으로 Redis jwt:authorities:{username} 조회 → AuthenticatedUser(id, username, roles) → SecurityContext
+  - user_id 클레임 있음 → 유저 토큰: user_id로 Redis jwt:authorities:{userId} 조회 → AuthenticatedUser(id, username, roles) → SecurityContext
   - user_id 없음 → 시스템 토큰: AuthenticatedClient(clientId) → SecurityContext (ROLE_SYSTEM)
   - Redis miss → 빈 roles → @PreAuthorize에서 403 (fail-open, 재로그인 유도)
   - 파싱 실패 → SecurityContext 미설정 → anyRequest().authenticated() → 401
@@ -424,7 +424,7 @@ Clean Architecture 구조
 - infrastructure/elasticsearch: ElasticsearchSearchAdapter (PostDocument / UserDocument, NativeQuery; 인덱스 없을 때 exception chain 순회로 index_not_found 감지 → 빈 배열 반환)
 - infrastructure/minio: MinioImageAdapter (버킷 자동 생성)
 - infrastructure/kafka: KafkaEventPublisher (KafkaTemplate<String, String>), OutboxRelayService (@Scheduled fixedDelay=1s initialDelay=5s — findAndClaim(100) → Kafka 동기 발행(.get(5s)) → markSent; 실패 시 unclaim; cleanupStaleClaims 30s 주기; cleanupProcessed 1h 주기), UserSyncEventConsumer (user-sync 토픽 — enabled/status 파싱 → userSyncService.sync(userId, username, enabled, status, version)), UsernameUpdateEventConsumer (user.username.updated 토픽 — userSyncService.syncUsername() 호출, enabled/status 덮어쓰기 없음)
-- infrastructure/cache: RedisAuthoritiesCache (jwt:authorities:{username} read-only)
+- infrastructure/cache: RedisAuthoritiesCache (jwt:authorities:{userId} read-only)
 - infrastructure/security:
   - CallerPrincipal (interface) — AuthenticatedUser / AuthenticatedClient 공통 타입
   - AuthenticatedUser(id: Long, username: String, roles: List<String>) : CallerPrincipal
@@ -469,7 +469,7 @@ Open API (JWT 기반 외부 API)
   - 토큰 검증 → claims["sub"] 추출
   - sub.toLongOrNull() == null → client_credentials 토큰 → ROLE_SYSTEM 반환 (user-active 이벤트 발행 없음)
   - sub.toLongOrNull() != null → userId(Long), claims["username"] → username
-    - Redis jwt:authorities:{username} 조회 → 권한 부여
+    - Redis jwt:authorities:{userId} 조회 → 권한 부여
     - user-active 토픽에 {"userId": Long} 발행 (authorization-server가 user_activity UPSERT)
     - Redis miss 시 OAuth2IntrospectionException 발생 (fail-closed — 권한 불명 시 접근 거부)
   - DefaultOAuth2AuthenticatedPrincipal(name=username or clientId, attributes=claims, authorities)

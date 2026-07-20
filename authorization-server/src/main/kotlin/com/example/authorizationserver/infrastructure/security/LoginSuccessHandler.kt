@@ -33,7 +33,9 @@ class LoginSuccessHandler(
         }
 
         loginAttemptService.onLoginSuccess(username)
-        userCachePort.saveAuthorities(username, authentication.authorities.mapNotNull { it.authority }.toSet())
+        user?.id?.let { userId ->
+            userCachePort.saveAuthorities(userId, authentication.authorities.mapNotNull { it.authority }.toSet())
+        }
         super.onAuthenticationSuccess(request, response, authentication)
     }
 }

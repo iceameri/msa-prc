@@ -2,6 +2,7 @@ package com.example.authorizationserver.presentation
 
 import com.example.authorizationserver.application.port.out.UserCachePort
 import com.example.authorizationserver.application.service.LoginAttemptService
+import com.example.authorizationserver.infrastructure.security.TenantAwareUserDetails
 import com.example.authorizationserver.application.service.MfaService
 import com.example.authorizationserver.application.service.UserDetailsServiceImpl
 import com.example.authorizationserver.infrastructure.persistence.UserJdbcRepository
@@ -68,7 +69,9 @@ class MfaController(
         SecurityContextHolder.getContext().authentication = auth
 
         loginAttemptService.onLoginSuccess(username)
-        userCachePort.saveAuthorities(username, userDetails.authorities.map { it.authority }.toSet())
+        (userDetails as? TenantAwareUserDetails)?.userId?.let { userId ->
+            userCachePort.saveAuthorities(userId, userDetails.authorities.map { it.authority }.toSet())
+        }
 
         val savedRequest = requestCache.getRequest(request, response)
         response.sendRedirect(savedRequest?.redirectUrl ?: "/")

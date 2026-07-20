@@ -61,7 +61,7 @@ class CustomOpaqueTokenIntrospector(
 
         eventPublishPort.publish("user-active", sub, """{"userId":$userId}""")
 
-        val authorities = (redisTemplate.opsForValue().get("jwt:authorities:$username") as? Collection<*>)
+        val authorities = (redisTemplate.opsForValue().get("jwt:authorities:$userId") as? Collection<*>)
             ?.filterIsInstance<String>()
             ?.map { SimpleGrantedAuthority(it) }
             ?.takeIf { it.isNotEmpty() }
