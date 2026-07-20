@@ -40,7 +40,10 @@ spring:
 management:
   otlp:
     tracing:
-      endpoint: http://tempo:4318/v1/traces
+      endpoint: http://alloy.msa.svc.cluster.local:4318/v1/traces
+  tracing:
+    sampling:
+      probability: 1.0  # Alloy tail-sampling에 위임, 앱은 전량 전송
 
 logging:
   level:

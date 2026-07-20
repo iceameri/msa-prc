@@ -59,7 +59,7 @@ management:
       endpoint: http://localhost:4318/v1/traces
   tracing:
     sampling:
-      probability: 1.0
+      probability: 1.0  # Alloy tail-sampling에 위임, 앱은 전량 전송
     propagation:
       consume: [b3_multi, b3]
       produce: [b3_multi, b3]

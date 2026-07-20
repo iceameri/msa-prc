@@ -95,8 +95,14 @@ Common
 - Prometheus 메트릭 수집 (micrometer-registry-prometheus, /actuator/prometheus)
 - LGTM 스택 (Loki + Grafana + Tempo + Mimir + Alloy) — ELK·Zipkin 대체
   - Tracing: micrometer-tracing-bridge-otel + opentelemetry-exporter-otlp
-    - 로컬: management.otlp.tracing.endpoint=http://localhost:4318/v1/traces (Tempo 직접 전송)
-    - K8s: management.otlp.tracing.endpoint=http://tempo:4318/v1/traces
+    - 앱 → Alloy (tail-sampling) → Tempo 구조 (Tempo 직접 전송 아님)
+    - management.tracing.sampling.probability: 1.0 (전량 전송 — 에러/정상 구분은 Alloy tail-sampling에 위임)
+    - 로컬: management.otlp.tracing.endpoint=http://localhost:4318/v1/traces (Alloy 수신, docker-compose 4317/4318은 Alloy가 노출)
+    - K8s: management.otlp.tracing.endpoint=http://alloy.msa.svc.cluster.local:4318/v1/traces
+    - Alloy tail-sampling (docker/alloy.config, k8s/helm/alloy-values.yaml):
+      - errors 정책: ERROR span 포함 트레이스 → sampling_percentage 100 (항상 보존)
+      - normal 정책: 그 외 트레이스 → sampling_percentage 100 (배포 시 낮출 것)
+      - decision_wait: 10s / num_traces: 50000
   - Logging: com.github.loki4j:loki-logback-appender:1.5.2 (Spring Boot BOM 미관리 → 버전 명시)
     - k8s 프로파일에서만 Loki4jAppender 활성화 (로컬은 CONSOLE only — 연결 오류 방지)
     - 레이블: app=${appName},level=%level / 메시지 패턴에 traceId·spanId 포함 (Tempo 연동)
@@ -683,8 +689,10 @@ LGTM 모니터링 스택 (ELK·Zipkin·Prometheus 대체)
 - 도입 목적: 관찰성의 세 가지 기둥(로그·메트릭·트레이스)을 하나의 플랫폼에서 통합적으로 다룰 수 있다
 - Loki: 로그 집계 (Loki4jAppender가 K8s 환경에서 직접 push)
   - 핵심 철학: 로그 내용을 인덱싱하지 말고, 메타데이터만 인덱싱하자 → 저장 비용 절감, 스트림 기반 쿼리
-- Tempo: 분산 추적 (OTLP HTTP 4318 / gRPC 4317 수신)
+- Tempo: 분산 추적 저장소 (Alloy에서 OTLP gRPC 4317로 수신, 호스트에 직접 노출하지 않음)
 - Mimir: 메트릭 장기 저장 (Prometheus 호환 remote_write API)
-- Alloy: 메트릭 수집기 (Spring Boot Actuator /actuator/prometheus 스크레이프 → Mimir 전송), 인프라 Pod 로그 수집
+- Alloy: 트레이스 수신·tail-sampling·Tempo 전달 + 메트릭 수집(/actuator/prometheus → Mimir) + 인프라 Pod 로그 수집
+  - 로컬: 호스트 4317/4318 노출 (Spring Boot가 직접 전송)
+  - K8s: alloy.msa.svc.cluster.local:4318 서비스로 수신
 - Grafana: 통합 시각화 (Mimir·Loki·Tempo 데이터소스 자동 프로비저닝, TraceID ↔ 로그 연동)
 - Elasticsearch: jwt-server 검색 기능 전용으로 유지 (로그 수집 목적 제거)

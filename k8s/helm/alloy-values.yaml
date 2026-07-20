@@ -19,6 +19,67 @@ alloy:
         }
       }
 
+      // ── Traces: Spring Boot → Alloy (tail-sampling) → Tempo ─────────────
+
+      otelcol.receiver.otlp "traces" {
+        grpc {
+          endpoint = "0.0.0.0:4317"
+        }
+        http {
+          endpoint = "0.0.0.0:4318"
+        }
+        output {
+          traces = [otelcol.processor.tail_sampling.default.input]
+        }
+      }
+
+      otelcol.processor.tail_sampling "default" {
+        decision_wait = "10s"
+        num_traces    = 50000
+
+        policy {
+          name = "errors"
+          type = "and"
+          and {
+            and_sub_policy {
+              name = "is-error"
+              type = "status_code"
+              status_code {
+                status_codes = ["ERROR"]
+              }
+            }
+            and_sub_policy {
+              name = "sample-rate"
+              type = "probabilistic"
+              probabilistic {
+                sampling_percentage = 100
+              }
+            }
+          }
+        }
+
+        policy {
+          name = "normal"
+          type = "probabilistic"
+          probabilistic {
+            sampling_percentage = 100
+          }
+        }
+
+        output {
+          traces = [otelcol.exporter.otlp.tempo.input]
+        }
+      }
+
+      otelcol.exporter.otlp "tempo" {
+        client {
+          endpoint = "tempo.msa.svc.cluster.local:4317"
+          tls {
+            insecure = true
+          }
+        }
+      }
+
       // ── Logs: 인프라 Pod (Kafka, Redis, PostgreSQL 등) → Loki ───────────
       // Spring Boot 3서비스는 Loki4j가 직접 push하므로 제외
 
@@ -60,6 +121,17 @@ alloy:
           url = "http://loki.msa.svc.cluster.local:3100/loki/api/v1/push"
         }
       }
+
+service:
+  extraPorts:
+    - name: otlp-grpc
+      port: 4317
+      targetPort: 4317
+      protocol: TCP
+    - name: otlp-http
+      port: 4318
+      targetPort: 4318
+      protocol: TCP
 
 serviceAccount:
   create: true
