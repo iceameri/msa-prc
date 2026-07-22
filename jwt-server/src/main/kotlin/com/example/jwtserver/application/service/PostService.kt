@@ -1,6 +1,6 @@
 package com.example.jwtserver.application.service
 
-import com.example.jwtserver.application.port.out.OutboxRepository
+import com.example.jwtserver.infrastructure.persistence.OutboxJdbcRepository
 import com.example.jwtserver.application.port.out.SearchPort
 import com.example.jwtserver.domain.event.OutboxEvent
 import com.example.jwtserver.domain.post.Post
@@ -18,7 +18,7 @@ class PostService(
     private val hashtagRepository: HashtagJdbcRepository,
     private val userSyncService: UserSyncService,
     private val searchPort: SearchPort,
-    private val outboxRepository: OutboxRepository
+    private val outboxRepository: OutboxJdbcRepository
 ) {
 
     @Transactional

@@ -1,6 +1,6 @@
 package com.example.jwtserver.application.service
 
-import com.example.jwtserver.application.port.out.OutboxRepository
+import com.example.jwtserver.infrastructure.persistence.OutboxJdbcRepository
 import com.example.jwtserver.domain.comment.Comment
 import com.example.jwtserver.domain.event.OutboxEvent
 import com.example.jwtserver.infrastructure.persistence.CommentJdbcRepository
@@ -16,7 +16,7 @@ class CommentService(
     private val commentRepository: CommentJdbcRepository,
     private val postRepository: PostJdbcRepository,
     private val userSyncService: UserSyncService,
-    private val outboxRepository: OutboxRepository
+    private val outboxRepository: OutboxJdbcRepository
 ) {
 
     @Transactional

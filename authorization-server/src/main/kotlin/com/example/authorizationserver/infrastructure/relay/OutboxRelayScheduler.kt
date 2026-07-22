@@ -1,18 +1,18 @@
-package com.example.jwtserver.infrastructure.kafka
+package com.example.authorizationserver.infrastructure.relay
 
-import com.example.jwtserver.infrastructure.persistence.OutboxJdbcRepository
+import com.example.authorizationserver.infrastructure.persistence.OutboxJdbcRepository
 import org.slf4j.LoggerFactory
 import org.springframework.kafka.core.KafkaTemplate
 import org.springframework.scheduling.annotation.Scheduled
-import org.springframework.stereotype.Service
+import org.springframework.stereotype.Component
 import java.util.concurrent.TimeUnit
 
-@Service
-class OutboxRelayService(
+@Component
+class OutboxRelayScheduler(
     private val outboxRepository: OutboxJdbcRepository,
     private val kafkaTemplate: KafkaTemplate<String, String>
 ) {
-    private val log = LoggerFactory.getLogger(OutboxRelayService::class.java)
+    private val log = LoggerFactory.getLogger(javaClass)
 
     @Scheduled(fixedDelayString = "\${outbox.relay.fixed-delay:1000}", initialDelay = 5000)
     fun relay() {
@@ -40,21 +40,15 @@ class OutboxRelayService(
         }
     }
 
-    // claim 후 크래시된 이벤트를 주기적으로 복구
     @Scheduled(fixedDelay = 30_000, initialDelay = 10_000)
-    fun cleanupStaleClaims() {
-        outboxRepository.resetStaleClaims()
-    }
+    fun cleanupStaleClaims() { outboxRepository.resetStaleClaims() }
 
-    // 전송 완료된 오래된 이벤트 정리
     @Scheduled(fixedDelay = 3_600_000, initialDelay = 60_000)
-    fun cleanupProcessed() {
-        outboxRepository.deleteProcessed()
-    }
+    fun cleanupProcessed() { outboxRepository.deleteProcessed() }
 
     private fun topicFor(eventType: String) = when (eventType) {
-        "REPORT_CREATED" -> "reports"
-        "POST_CREATED"   -> "outbox.events"
-        else             -> "notifications"
+        "USER_SYNC"        -> "user-sync"
+        "USERNAME_UPDATED" -> "user.username.updated"
+        else               -> eventType.lowercase().replace("_", "-")
     }
 }

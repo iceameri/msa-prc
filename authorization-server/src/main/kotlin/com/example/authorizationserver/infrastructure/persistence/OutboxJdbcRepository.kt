@@ -1,6 +1,6 @@
-package com.example.jwtserver.infrastructure.persistence
+package com.example.authorizationserver.infrastructure.persistence
 
-import com.example.jwtserver.domain.event.OutboxEvent
+import com.example.authorizationserver.domain.outbox.OutboxEvent
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Repository
 import java.sql.ResultSet
@@ -11,7 +11,7 @@ class OutboxJdbcRepository(private val jdbcTemplate: JdbcTemplate) {
     fun save(event: OutboxEvent) {
         jdbcTemplate.update(
             """
-            INSERT INTO jwt_db.public.outbox_events (aggregate_id, aggregate_type, event_type, payload)
+            INSERT INTO authorization_db.public.outbox_events (aggregate_id, aggregate_type, event_type, payload)
             VALUES (?, ?, ?, ?::jsonb)
             """.trimMargin(),
             event.aggregateId, event.aggregateType, event.eventType, event.payload
@@ -23,9 +23,9 @@ class OutboxJdbcRepository(private val jdbcTemplate: JdbcTemplate) {
     fun findAndClaim(limit: Int): List<OutboxEvent> =
         jdbcTemplate.query(
             """
-            UPDATE jwt_db.public.outbox_events SET claimed_at = NOW()
+            UPDATE authorization_db.public.outbox_events SET claimed_at = NOW()
             WHERE id IN (
-                SELECT  id FROM jwt_db.public.outbox_events
+                SELECT  id FROM authorization_db.public.outbox_events
                 WHERE   claimed_at IS NULL AND
                         sent_at IS NULL
                 ORDER BY created_at, id
@@ -40,7 +40,7 @@ class OutboxJdbcRepository(private val jdbcTemplate: JdbcTemplate) {
     fun markSent(id: Long) {
         jdbcTemplate.update(
             """
-            UPDATE  jwt_db.public.outbox_events
+            UPDATE  authorization_db.public.outbox_events
             SET     sent_at = NOW()
             WHERE   id = ?
             """.trimMargin(),
@@ -51,7 +51,7 @@ class OutboxJdbcRepository(private val jdbcTemplate: JdbcTemplate) {
     fun unclaim(id: Long) {
         jdbcTemplate.update(
             """
-            UPDATE  jwt_db.public.outbox_events
+            UPDATE  authorization_db.public.outbox_events
             SET     claimed_at = NULL
             WHERE   id = ?
             """.trimMargin(),
@@ -64,7 +64,7 @@ class OutboxJdbcRepository(private val jdbcTemplate: JdbcTemplate) {
     fun resetStaleClaims() {
         jdbcTemplate.update(
             """
-            UPDATE  jwt_db.public.outbox_events
+            UPDATE  authorization_db.public.outbox_events
             SET     claimed_at = NULL
             WHERE   claimed_at IS NOT NULL AND
                     sent_at IS NULL AND
@@ -77,7 +77,7 @@ class OutboxJdbcRepository(private val jdbcTemplate: JdbcTemplate) {
     fun deleteProcessed() {
         jdbcTemplate.update(
             """
-            DELETE FROM jwt_db.public.outbox_events
+            DELETE FROM authorization_db.public.outbox_events
             WHERE   sent_at IS NOT NULL AND
                     sent_at < NOW() - INTERVAL '7 days'
             """.trimMargin()

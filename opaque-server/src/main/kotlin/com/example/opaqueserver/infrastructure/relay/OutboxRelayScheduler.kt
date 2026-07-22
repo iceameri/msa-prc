@@ -14,7 +14,7 @@ class OutboxRelayScheduler(
 ) {
     private val log = LoggerFactory.getLogger(OutboxRelayScheduler::class.java)
 
-    @Scheduled(fixedDelay = 1000, initialDelay = 5000)
+    @Scheduled(fixedDelayString = "\${outbox.relay.fixed-delay:1000}", initialDelay = 5000)
     fun relay() {
         val events = outboxRepository.findAndClaim(limit = 100)
         if (events.isEmpty()) return

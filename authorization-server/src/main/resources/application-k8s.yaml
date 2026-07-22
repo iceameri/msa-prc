@@ -34,6 +34,7 @@ spring:
         - classpath:sql/ddl/oauth2_authorization.sql
         - classpath:sql/ddl/oauth2_authorization_consent.sql
         - classpath:sql/ddl/api_keys.sql
+        - classpath:sql/ddl/outbox_events.sql
         - classpath:sql/migration/add_tenant_to_users.sql
 
 # RSA 키페어 마운트 경로 (k8s Secret → /app/keys 볼륨)

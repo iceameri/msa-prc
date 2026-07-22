@@ -1,7 +1,7 @@
 package com.example.authorizationserver.infrastructure.persistence
 
+import com.example.authorizationserver.domain.outbox.OutboxEvent
 import com.example.authorizationserver.domain.user.User
-import com.example.authorizationserver.infrastructure.kafka.UserSyncEventPublisher
 import org.slf4j.LoggerFactory
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.jdbc.core.ResultSetExtractor
@@ -14,7 +14,7 @@ import java.time.Instant
 @Repository
 class UserJdbcRepository(
     private val jdbcTemplate: JdbcTemplate,
-    private val userSyncEventPublisher: UserSyncEventPublisher
+    private val outboxRepository: OutboxJdbcRepository
 ) {
 
     private val log = LoggerFactory.getLogger(javaClass)
@@ -83,7 +83,7 @@ class UserJdbcRepository(
             )!!
             val saved = user.copy(id = userId)
             syncAuthorities(userId, user.authorities)
-            userSyncEventPublisher.publish(userId, user.username, user.tenantId, user.enabled, user.status, version = 1L)
+            outboxRepository.save(userSyncEvent(userId, user.username, user.tenantId, user.enabled, user.status, version = 1L))
             saved
         } else {
             val newVersion = jdbcTemplate.queryForObject<Long>(
@@ -100,7 +100,7 @@ class UserJdbcRepository(
                 user.id
             )!!
             syncAuthorities(user.id, user.authorities)
-            userSyncEventPublisher.publish(user.id, user.username, user.tenantId, user.enabled, user.status, newVersion)
+            outboxRepository.save(userSyncEvent(user.id, user.username, user.tenantId, user.enabled, user.status, newVersion))
             user
         }
     }
@@ -154,7 +154,7 @@ class UserJdbcRepository(
             return
         }
         val (username, tenantId, version) = matched
-        userSyncEventPublisher.publish(userId, username, tenantId, enabled, status, version)
+        outboxRepository.save(userSyncEvent(userId, username, tenantId, enabled, status, version))
     }
 
     fun updateUsername(userId: Long, newUsername: String) {
@@ -167,7 +167,12 @@ class UserJdbcRepository(
             """.trimMargin(),
             newUsername, userId
         )!!
-        userSyncEventPublisher.publishUsernameUpdate(userId, newUsername, newVersion)
+        outboxRepository.save(OutboxEvent(
+            aggregateId = userId.toString(),
+            aggregateType = "USER",
+            eventType = "USERNAME_UPDATED",
+            payload = """{"userId":$userId,"newUsername":"${newUsername.escapeJson()}","version":$newVersion}"""
+        ))
     }
 
     private fun syncAuthorities(userId: Long, authorities: Set<String>) {
@@ -187,6 +192,18 @@ class UserJdbcRepository(
             authorities.map { arrayOf<Any>(userId, it) }
         )
     }
+
+    private fun userSyncEvent(userId: Long, username: String, tenantId: Long?, enabled: Boolean, status: String, version: Long): OutboxEvent {
+        val tenantField = if (tenantId != null) ""","tenantId":$tenantId""" else ""","tenantId":null"""
+        return OutboxEvent(
+            aggregateId = userId.toString(),
+            aggregateType = "USER",
+            eventType = "USER_SYNC",
+            payload = """{"userId":$userId,"username":"${username.escapeJson()}"$tenantField,"enabled":$enabled,"status":"$status","version":$version}"""
+        )
+    }
+
+    private fun String.escapeJson() = this.replace("\\", "\\\\").replace("\"", "\\\"")
 
     private val userExtractor = ResultSetExtractor { rs ->
         var user: User? = null
