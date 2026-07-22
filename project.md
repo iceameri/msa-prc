@@ -16,11 +16,11 @@ Docker-compose (로컬 개발)
 - postgres-jwt  (port 5433) → jwt_db
 - postgres-opaque (port 5434) → opaque_db
 - redis, Kafka (KRaft), Kafka-connect, MinIO, Elasticsearch
-- LGTM 스택: Loki(3100), Tempo(3200·4317·4318), Mimir(9009), Alloy(12345), Grafana(3000)
+- LGTM 스택: Loki(3100), Tempo(3200), Mimir(9009), Alloy(12345·4317·4318), Grafana(3000)
   - docker/tempo.yaml, docker/mimir.yaml, docker/alloy.config, docker/grafana/provisioning/ (git 추적)
   - infra/ 디렉터리는 데이터 볼륨 전용 (.gitignore)
 - kafka_data 볼륨 추가 (재시작 시 토픽/오프셋 보존)
-- kafka-connect healthcheck 추가 (port 8083, start_period 30s)
+- kafka 및 kafka-connect healthcheck: start_period 60s, retries 10 (KRaft 초기화 40-70s 소요로 인한 의존성 기동 실패 방지)
 - kafka-init 제거 → 토픽 생성은 각 서비스 KafkaTopicConfig로 대체
 
 Deprecated 서비스 (K8s 전환으로 역할 대체)
@@ -174,10 +174,11 @@ OAuth2 Token Redis 캐시 (token store DB 부하 감소)
 - Redis 키: oauth2:token:{tokenValue} → authorizationId (StringRedisTemplate, String → String)
   - access token / refresh token / id_token / auth code 모두 각각 적재
 - findByToken(): Redis 조회 → 캐시 히트 시 findById(PK) → 캐시 미스 시 DB 풀쿼리 후 Redis 적재
+  - DB에 없고 tokenType==REFRESH_TOKEN → rt:graveyard:{rtValue} 조회 → principalName 있으면 revokeAllForPrincipal() + warn 로그 (RT rotation 재사용 탐지)
   - DB에 없으면 null 반환 (Spring AS가 invalid token으로 처리)
   - 스테일 캐시 자가 치유: findById() null 반환 시 해당 Redis 키 즉시 삭제
 - save(): DB 저장 후 모든 토큰 값 Redis 적재
-- remove(): DB 삭제 후 모든 토큰 값 Redis 제거
+- remove(): graveyard 등록(RT만, TTL≤0 스킵) → DB 삭제 → Redis 캐시 제거 (graveyard를 DB 삭제 이전에 등록해 race 방지)
 - TTL: refresh token 만료 기준 → access token 만료 기준 → 30분 fallback (expiresAt null 또는 이미 만료 시)
 - Redis 장애: runCatching 흡수 → DB 직접 조회 투명 폴백
 - DB 장애: CircuitBreaker("authorization-db") open 시 즉시 예외 (인트로스펙션 실패)
@@ -192,6 +193,7 @@ Redis 키 네임스페이스 (단일 Redis 인스턴스, prefix로 논리 분리
 - auth:reset:{token}                 → 비밀번호 재설정 토큰 (TTL 30분)
 - jwt:authorities:{userId}           → 유저 권한 목록 (TTL 24h) ← authorization-server write / jwt-server·opaque-server read
 - oauth2:token:{tokenValue}          → authorizationId (TTL: refresh token 만료 기준, StringRedisTemplate) ← RedisBackedOAuth2AuthorizationService
+- rt:graveyard:{rtValue}             → principalName (TTL: RT 잔여 유효시간, RT rotation 재사용 탐지용)
 - rl:config:{apiKeyId}               → Open API 키 레이트리밋 설정 "{burst}:{refill}" (영구, 키 폐기 시 삭제)
 - rl:count:{apiKeyId}:{minuteWindow} → Open API 키 분당 요청 카운터 (TTL 2분, INCR 원자적)
 
@@ -218,14 +220,12 @@ Clean Architecture 구조
 - domain/qr: QrLoginSession, QrLoginStatus
 - application/port/out: UserCachePort (deleteAuthorities 포함), QrLoginCachePort, PasswordResetCachePort
 - application/service: UserDetailsServiceImpl, LoginAttemptService, MfaService, QrLoginService, PasswordResetService
-- infrastructure/persistence: UserJdbcRepository (ResultSetExtractor + LEFT JOIN, mfa/status/last_active_at 컬럼, findByEmail; save() 후 user-sync 이벤트 발행; updateUsername() 후 user.username.updated 이벤트 발행), UserActivityJdbcRepository (user_activity UPSERT)
+- infrastructure/persistence: UserJdbcRepository (ResultSetExtractor + LEFT JOIN, mfa/status/last_active_at 컬럼, findByEmail; save() 후 user-sync 이벤트 outbox 저장; updateUsername() 후 user.username.updated 이벤트 outbox 저장), UserActivityJdbcRepository (user_activity UPSERT), OutboxJdbcRepository (authorization_db.public.outbox_events; findAndClaim: FOR UPDATE SKIP LOCKED RETURNING)
 - infrastructure/cache: RedisUserCache, RedisQrLoginCache, RedisPasswordResetCache
-- infrastructure/oauth2: SessionLimitingAuthorizationService, RedisBackedOAuth2AuthorizationService (Redis 캐시 레이어 — StringRedisTemplate + CircuitBreaker("authorization-db")), TokenRevocationService (principal_name 기준 oauth2_authorization 전체 삭제 — SUSPEND/BAN/DELETE 시 기존 토큰 즉시 폐기)
+- infrastructure/oauth2: SessionLimitingAuthorizationService, RedisBackedOAuth2AuthorizationService (Redis 캐시 레이어 — StringRedisTemplate + CircuitBreaker("authorization-db"); RT rotation graveyard: remove() 시 rt:graveyard:{rtValue}→principalName 등록(TTL=RT잔여시간), findByToken(REFRESH_TOKEN) null 시 graveyard 조회 → 재사용 감지 시 revokeAllForPrincipal() + warn 로그), TokenRevocationService (principal_name 기준 oauth2_authorization 전체 삭제 — SUSPEND/BAN/DELETE 및 RT 재사용 탐지 시 기존 토큰 즉시 폐기)
 - infrastructure/security: LoginSuccessHandler (MFA 분기), LoginFailureHandler, RedisLogoutHandler (LogoutHandler 구현)
-- infrastructure/kafka: UserManagementEventConsumer (user-management 토픽 구독 → userId 기반 setStatusAndEnabled 단일 쿼리 + Redis 무효화 + TokenRevocationService 토큰 폐기), UserActivityEventConsumer (user-active 토픽 구독 → user_activity UPSERT), UserSyncEventPublisher (user-sync 토픽 발행 + user.username.updated 토픽 발행)
-  - UserSyncEventPublisher.publish(): enabled, status 파라미터 포함 (jwt-server 계정 상태 동기화)
-  - setStatusAndEnabled(): UPDATE...RETURNING으로 변경 → Kafka payload에 version 포함 가능
-  - setEnabled / setEnabledById / updateStatusById 구현체 제거 (setStatusAndEnabled으로 통합)
+- infrastructure/kafka: UserManagementEventConsumer (user-management 토픽 구독 → userId 기반 setStatusAndEnabled 단일 쿼리 + Redis 무효화 + TokenRevocationService 토큰 폐기), UserActivityEventConsumer (user-active 토픽 구독 → user_activity UPSERT)
+- infrastructure/relay: OutboxRelayScheduler (OutboxJdbcRepository + KafkaTemplate; user-sync / user.username.updated 토픽 라우팅; fixedDelayString=${outbox.relay.fixed-delay:1000}ms initialDelay=5s)
 - infrastructure/batch: InactiveUserCleanupService (@Scheduled 매일 03:00 + 수동 트리거, JdbcTemplate으로 user_activity 조회 → user-management 토픽 발행)
 - infrastructure/config: SecurityConfig (logout 블록 추가), AuthorizationServerConfig, OAuth2TokenCustomizerConfig, RedisConfig, SwaggerConfig, KafkaProducerConfig (KafkaTemplate<String,String> 명시적 빈 + user-sync/user.username.updated NewTopic)
 - presentation: MfaController, QrLoginController, PasswordResetController, BatchController (수동 실행: POST /admin/batch/inactive-user-cleanup → 처리된 유저 수 반환)
@@ -386,7 +386,7 @@ out-of-order 보호 (순서 역전 메시지 무시)
 
 Outbox Pattern (알림 이벤트)
 - 도메인 이벤트 발생 시 outbox_events 테이블에 먼저 저장 (같은 트랜잭션)
-- 릴레이 (@Scheduled fixedDelay=1s, initialDelay=5s):
+- 릴레이 (@Scheduled fixedDelayString=${outbox.relay.fixed-delay:1000}ms, initialDelay=5s; 로컬 5s / k8s 기본 1s):
   - findAndClaim: UPDATE SET claimed_at=NOW() ... FOR UPDATE SKIP LOCKED RETURNING (원자적 pick-up, 다중 인스턴스 중복 방지)
   - Kafka 동기 발행 (.get(5s)) → markSent: UPDATE SET sent_at=NOW()
   - 발행 실패 시 unclaim (claimed_at=NULL) → 다음 사이클 재시도
@@ -418,7 +418,7 @@ DDL (jwt_db) — FK 논리적 사용 (REFERENCES 제약 없음)
 Clean Architecture 구조
 - domain: User(id: Long, username, version: Long), Post(authorId: Long? — nullable, clientId: String? — system 작성 시, authorUsername: String? — JOIN으로 채워짐, PostStatus), Comment(authorId: Long? nullable, clientId: String? nullable, authorUsername: String? — JOIN으로 채워짐), Like, Follow, Hashtag, Report(ReportTargetType), OutboxEvent
 - domain/event: ProcessedEventRepository (insertIfAbsent / deleteOlderThan)
-- application/port/out: AuthoritiesCachePort, SearchPort, ImageStoragePort, EventPublishPort, OutboxRepository (save / findAndClaim / markSent / unclaim / resetStaleClaims / deleteProcessed)
+- application/port/out: AuthoritiesCachePort, SearchPort, ImageStoragePort, EventPublishPort
 - application/service: UserSyncService (sync(userId, username, enabled, status, version=0L)=authorization_users UPSERT / syncUsername(userId, username, version)=username만 변경(enabled/status 덮어쓰기 방지) / resolveId), IdempotentEventGuard (@Transactional runIfNew(eventId, topic, block) + @Scheduled cleanup 매일 03:00), PostService, CommentService, LikeService, FollowService, FeedService, SearchService (reindexAll: PostgreSQL 전체 배치 조회 → ES 재인덱싱, 500건 단위), ImageService, ReportService
   - PostService/CommentService: CallerPrincipal 파라미터 사용 (resolveAuthor() / canModify() 내부 헬퍼)
     - AuthenticatedUser: sync(id, username) 선행, authorId 사용
@@ -429,7 +429,7 @@ Clean Architecture 구조
 - infrastructure/persistence: UserJdbcRepository (authorization_users 테이블, sync(userId, username, version: Long)=ON CONFLICT DO UPDATE WHERE version < EXCLUDED.version), ProcessedEventJdbcRepository (INSERT ON CONFLICT DO NOTHING → affectedRows 판정), PostJdbcRepository (모든 조회에 LEFT JOIN authorization_users + LEFT JOIN authorization_system_clients, COALESCE AS author_username; save()에서 authorId/clientId nullable 처리; rs.wasNull()로 NULL authorId 감지), CommentJdbcRepository (동일 패턴), LikeJdbcRepository, FollowJdbcRepository, HashtagJdbcRepository, ReportJdbcRepository, OutboxJdbcRepository (findAndClaim: FOR UPDATE SKIP LOCKED RETURNING / markSent / unclaim / resetStaleClaims / deleteProcessed)
 - infrastructure/elasticsearch: ElasticsearchSearchAdapter (PostDocument / UserDocument, NativeQuery; 인덱스 없을 때 exception chain 순회로 index_not_found 감지 → 빈 배열 반환)
 - infrastructure/minio: MinioImageAdapter (버킷 자동 생성)
-- infrastructure/kafka: KafkaEventPublisher (KafkaTemplate<String, String>), OutboxRelayService (@Scheduled fixedDelay=1s initialDelay=5s — findAndClaim(100) → Kafka 동기 발행(.get(5s)) → markSent; 실패 시 unclaim; cleanupStaleClaims 30s 주기; cleanupProcessed 1h 주기), UserSyncEventConsumer (user-sync 토픽 — enabled/status 파싱 → userSyncService.sync(userId, username, enabled, status, version)), UsernameUpdateEventConsumer (user.username.updated 토픽 — userSyncService.syncUsername() 호출, enabled/status 덮어쓰기 없음)
+- infrastructure/kafka: KafkaEventPublisher (KafkaTemplate<String, String>), OutboxRelayService (@Scheduled fixedDelayString=${outbox.relay.fixed-delay:1000}ms initialDelay=5s; 로컬 5s / k8s 기본 1s — findAndClaim(100) → Kafka 동기 발행(.get(5s)) → markSent; 실패 시 unclaim; cleanupStaleClaims 30s 주기; cleanupProcessed 1h 주기), UserSyncEventConsumer (user-sync 토픽 — enabled/status 파싱 → userSyncService.sync(userId, username, enabled, status, version)), UsernameUpdateEventConsumer (user.username.updated 토픽 — userSyncService.syncUsername() 호출, enabled/status 덮어쓰기 없음)
 - infrastructure/cache: RedisAuthoritiesCache (jwt:authorities:{userId} read-only)
 - infrastructure/security:
   - CallerPrincipal (interface) — AuthenticatedUser / AuthenticatedClient 공통 타입
@@ -541,7 +541,7 @@ Open API (JWT 기반 외부 API)
 Kafka 토픽
 - 구독(Consumer): notifications, reports, payment.saga
 - 발행(Producer): payment.saga, report-actions, user-active (KafkaTemplate 직접 발행)
-- Outbox 릴레이 발행: user-management (OutboxRelayScheduler → 1초 주기, FOR UPDATE SKIP LOCKED, markSent 후 7일 보존)
+- Outbox 릴레이 발행: user-management (OutboxRelayScheduler → fixedDelay 로컬 5s / k8s 기본 1s, FOR UPDATE SKIP LOCKED, markSent 후 7일 보존)
 
 authorization-server Kafka
 - 구독(Consumer): user-management, user-active
@@ -550,14 +550,14 @@ authorization-server Kafka
     - SUSPEND / BAN / DELETE → setStatusAndEnabled(false) + jwt:authorities 삭제 + user 캐시 evict
     - RESTORE → setStatusAndEnabled(true, "ACTIVE") + user 캐시 evict
   - user-active payload: {"userId": Long} → user_activity UPSERT
-- 발행(Producer): user-sync, user.username.updated
-  - user-sync payload: {"userId": Long, "username": String, "enabled": Boolean, "status": String, "version": Long}
-    - UserJdbcRepository.save() 완료 후 발행 (INSERT: version=1 고정 / UPDATE: version=version+1 RETURNING)
-    - setStatusAndEnabled() 완료 후 발행 (UPDATE...RETURNING으로 변경, version 포함)
+- 발행(Producer): user-sync, user.username.updated — OutboxRelayScheduler가 outbox_events 테이블에서 릴레이 발행
+  - user-sync payload: {"userId": Long, "username": String, "tenantId": Long|null, "enabled": Boolean, "status": String, "version": Long}
+    - UserJdbcRepository.save() 완료 후 outbox 저장 (INSERT: version=1 고정 / UPDATE: version=version+1 RETURNING)
+    - setStatusAndEnabled() 완료 후 outbox 저장 (UPDATE...RETURNING으로 변경, version 포함)
     - version: DB 업데이트마다 단조 증가 — jwt-server Consumer의 out-of-order 판정 기준
     - jwt-server가 소비하여 authorization_users UPSERT (user_id, username, enabled, status, version)
   - user.username.updated payload: {"userId": Long, "newUsername": String, "version": Long}
-    - UserJdbcRepository.updateUsername() 완료 후 발행 (version=version+1 RETURNING)
+    - UserJdbcRepository.updateUsername() 완료 후 outbox 저장 (version=version+1 RETURNING)
     - jwt-server UsernameUpdateEventConsumer → syncUsername() 호출 (username만 업데이트, enabled/status 유지)
 
 DDL (opaque_db) — FK 논리적 사용
@@ -577,7 +577,7 @@ Clean Architecture 구조
 - application/port/out: EventPublishPort, EmailPort
 - application/service: UserManagementService (actorId+actorUsername 모두 수신 — audit_log + outbox_events 단일 트랜잭션), PaymentService (userId.toString()을 actorId로 사용), ReportProcessingService (actorId+actorUsername 수신), AuditService (log(actorId, actorUsername, ...)), NotificationService (send(recipientId, recipientUsername, ...)), StatisticsService (유저 통계 제외)
 - infrastructure/persistence: PaymentJdbcRepository (findByIdAndUserId/findByUserId 추가), PaymentSagaJdbcRepository, ReportJdbcRepository, AuditJdbcRepository (actor_id+actor_username INSERT/SELECT), NotificationJdbcRepository (recipient_id+recipient_username INSERT), OutboxJdbcRepository (findAndClaim: UPDATE SET claimed_at=NOW() FOR UPDATE SKIP LOCKED RETURNING / markSent / unclaim / resetStaleClaims / deleteProcessed)
-- infrastructure/relay: OutboxRelayScheduler (@Scheduled fixedDelay=1s initialDelay=5s — findAndClaim → Kafka send(.get(5s)) → markSent; 실패 시 unclaim + return; cleanupStaleClaims 30s 주기; cleanupProcessed 1h 주기)
+- infrastructure/relay: OutboxRelayScheduler (@Scheduled fixedDelayString=${outbox.relay.fixed-delay:1000}ms initialDelay=5s; 로컬 5s / k8s 기본 1s — findAndClaim → Kafka send(.get(5s)) → markSent; 실패 시 unclaim + return; cleanupStaleClaims 30s 주기; cleanupProcessed 1h 주기)
 - infrastructure/rest: UserRestRepository (UserRepository 구현체, auth-server /internal/users/{id} REST 호출 — 실패 시 null 반환, notification email 조회용)
 - infrastructure/kafka: KafkaEventPublisher, NotificationEventConsumer (targetId+target 추출 → send(recipientId, recipientUsername, ...)), ReportEventConsumer, PaymentSagaConsumer
 - infrastructure/mail: MailAdapter (JavaMailSender)

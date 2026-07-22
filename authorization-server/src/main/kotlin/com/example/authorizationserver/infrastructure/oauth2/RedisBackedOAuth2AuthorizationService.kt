@@ -1,6 +1,7 @@
 package com.example.authorizationserver.infrastructure.oauth2
 
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry
+import org.slf4j.LoggerFactory
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.security.oauth2.core.oidc.OidcIdToken
 import org.springframework.security.oauth2.server.authorization.OAuth2Authorization
@@ -11,14 +12,17 @@ import java.time.Duration
 import java.time.Instant
 
 private const val KEY_PREFIX = "oauth2:token:"
+private const val GRAVEYARD_PREFIX = "rt:graveyard:"
 private val FALLBACK_TTL = Duration.ofMinutes(30)
 
 class RedisBackedOAuth2AuthorizationService(
     private val delegate: OAuth2AuthorizationService,
     private val redis: StringRedisTemplate,
+    private val tokenRevocationService: TokenRevocationService,
     cbRegistry: CircuitBreakerRegistry
 ) : OAuth2AuthorizationService {
 
+    private val log = LoggerFactory.getLogger(javaClass)
     private val cb = cbRegistry.circuitBreaker("authorization-db")
 
     override fun save(authorization: OAuth2Authorization) {
@@ -27,6 +31,8 @@ class RedisBackedOAuth2AuthorizationService(
     }
 
     override fun remove(authorization: OAuth2Authorization) {
+        // graveyard 등록을 delegate.remove() 이전에 해야 race 방지
+        runCatching { registerGraveyard(authorization) }
         cb.executeRunnable { delegate.remove(authorization) }
         runCatching { evictAll(authorization) }
     }
@@ -34,7 +40,7 @@ class RedisBackedOAuth2AuthorizationService(
     override fun findById(id: String): OAuth2Authorization =
         cb.executeSupplier { delegate.findById(id) }
 
-    override fun findByToken(token: String, tokenType: OAuth2TokenType?): OAuth2Authorization {
+    override fun findByToken(token: String, tokenType: OAuth2TokenType?): OAuth2Authorization? {
         val cachedId = runCatching { redis.opsForValue().get(KEY_PREFIX + token) }.getOrNull()
 
         if (cachedId != null) {
@@ -50,8 +56,27 @@ class RedisBackedOAuth2AuthorizationService(
         val auth = cb.executeSupplier { delegate.findByToken(token, tokenType) }
         if (auth != null) {
             runCatching { cacheAll(auth) }
+            return auth
         }
-        return auth  // DB에도 없으면 null 반환 (Spring AS가 invalid token으로 처리)
+
+        // RT 재사용 탐지 — DB에도 없을 때만 graveyard 확인
+        if (tokenType == OAuth2TokenType.REFRESH_TOKEN) {
+            val principalName = runCatching { redis.opsForValue().get(GRAVEYARD_PREFIX + token) }.getOrNull()
+            if (principalName != null) {
+                log.warn("Refresh token reuse detected for principal={} — revoking all sessions", principalName)
+                runCatching { cb.executeRunnable { tokenRevocationService.revokeAllForPrincipal(principalName) } }
+                    .onFailure { log.error("Failed to revoke sessions for {}: {}", principalName, it.message) }
+            }
+        }
+
+        return null
+    }
+
+    private fun registerGraveyard(auth: OAuth2Authorization) {
+        val rt = auth.refreshToken?.token ?: return
+        val ttl = Duration.between(Instant.now(), rt.expiresAt ?: return)
+        if (ttl.isNegative || ttl.isZero) return
+        redis.opsForValue().set(GRAVEYARD_PREFIX + rt.tokenValue, auth.principalName, ttl)
     }
 
     private fun cacheAll(auth: OAuth2Authorization) {

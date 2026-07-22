@@ -5,6 +5,7 @@ import com.nimbusds.jose.jwk.RSAKey
 import com.nimbusds.jose.jwk.source.ImmutableJWKSet
 import com.nimbusds.jose.jwk.source.JWKSource
 import com.nimbusds.jose.proc.SecurityContext
+import com.example.authorizationserver.infrastructure.oauth2.TokenRevocationService
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.context.annotation.Bean
@@ -48,12 +49,14 @@ class AuthorizationServerConfig(
         jdbcTemplate: JdbcTemplate,
         registeredClientRepository: RegisteredClientRepository,
         stringRedisTemplate: StringRedisTemplate,
-        circuitBreakerRegistry: CircuitBreakerRegistry
+        circuitBreakerRegistry: CircuitBreakerRegistry,
+        tokenRevocationService: TokenRevocationService
     ): OAuth2AuthorizationService =
         com.example.authorizationserver.infrastructure.oauth2.SessionLimitingAuthorizationService(
             com.example.authorizationserver.infrastructure.oauth2.RedisBackedOAuth2AuthorizationService(
                 JdbcOAuth2AuthorizationService(jdbcTemplate, registeredClientRepository),
                 stringRedisTemplate,
+                tokenRevocationService,
                 circuitBreakerRegistry
             ),
             jdbcTemplate,
