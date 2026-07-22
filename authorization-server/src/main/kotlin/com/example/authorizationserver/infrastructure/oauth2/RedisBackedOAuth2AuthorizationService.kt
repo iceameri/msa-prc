@@ -74,8 +74,13 @@ class RedisBackedOAuth2AuthorizationService(
 
     private fun registerGraveyard(auth: OAuth2Authorization) {
         val rt = auth.refreshToken?.token ?: return
-        val ttl = Duration.between(Instant.now(), rt.expiresAt ?: return)
-        if (ttl.isNegative || ttl.isZero) return
+        val ttl = if (rt.expiresAt == null) {
+            FALLBACK_TTL
+        } else {
+            val remaining = Duration.between(Instant.now(), rt.expiresAt)
+            if (remaining.isNegative || remaining.isZero) return
+            remaining
+        }
         redis.opsForValue().set(GRAVEYARD_PREFIX + rt.tokenValue, auth.principalName, ttl)
     }
 
